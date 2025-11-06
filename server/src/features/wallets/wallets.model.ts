@@ -107,3 +107,18 @@ export async function debitWallet(userId: string, role: 'payer' | 'payout', amou
   await db.collection<WalletDoc>('wallets').updateOne({ _id: w._id }, { $inc: { available: -amount } });
   await db.collection<LedgerDoc>('ledger_entries').insertOne({ _id: randomUUID(), wallet_id: w._id, type: 'debit', amount, ref_type: refType, ref_id: refId, ts: new Date().toISOString() } as any);
 }
+
+export async function listWalletsByOwnerUserId(userId: string) {
+  const db = await getDb();
+  return db.collection<WalletDoc>('wallets').find({ owner_user_id: userId } as any).toArray();
+}
+
+export async function listLedgerEntriesByWalletIds(walletIds: string[], limit = 100) {
+  const db = await getDb();
+  return db
+    .collection<LedgerDoc>('ledger_entries')
+    .find({ wallet_id: { $in: walletIds } } as any)
+    .sort({ ts: -1 })
+    .limit(limit)
+    .toArray();
+}

@@ -1,25 +1,19 @@
 import { z } from 'zod';
+import { createResourceInput as _createResourceInput } from '@/features/resources/resources.schema.js';
 
-export const createResourceInput = z.object({
-  title: z.string().min(2),
-  type: z.enum(['site', 'dataset', 'file']),
-  format: z.string(),
-  domain: z.string().optional(),
-  path: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-  summary: z.string().optional(),
-  schema: z.array(z.string()).optional(),
-  size_bytes: z.number().int().nonnegative().optional(),
-  price_per_kb: z.number().nonnegative().optional(),
-  price_flat: z.number().nonnegative().optional(),
-  visibility: z.enum(['public', 'restricted']).default('public'),
-  modes: z.array(z.enum(['raw', 'summary'])).default(['raw']),
-  storage_ref: z.string().optional(),
-  connector_id: z.string().optional(),
-  allow_agent_ids: z.array(z.string()).optional(),
-  deny_paths: z.array(z.string()).optional(),
-});
+export const createResourceInput = _createResourceInput; // backward compatibility
 
 export const cloudinarySignatureInput = z.object({
   public_id: z.string().min(1),
+});
+
+export const siteVerifyInput = z.object({
+  domain: z.string(),
+  method: z.enum(['dns', 'file']),
+});
+
+export const siteVerifyCheckInput = z.object({
+  domain: z.string(),
+  method: z.enum(['dns', 'file']),
+  token: z.string(),
 });

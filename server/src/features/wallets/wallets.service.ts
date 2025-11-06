@@ -1,7 +1,9 @@
 import { Keypair } from '@solana/web3.js';
 import { encryptSecret } from '@/services/crypto/keystore.js';
 import { upsertWalletKey, findWalletKey } from '@/features/wallets/keys.model.js';
-import { getOrInitWallet } from '@/features/wallets/wallets.model.js';
+import { getOrInitWallet, creditWallet, debitWallet } from '@/features/wallets/wallets.model.js';
+import { insertDeposit } from '@/features/payments/deposits.model.js';
+import { insertWithdrawal, updateWithdrawal } from '@/features/payments/withdrawals.model.js';
 
 export async function initUserWallets(userId: string) {
   await getOrInitWallet(userId, 'payer');
@@ -26,4 +28,27 @@ export async function ensureSolanaKey(userId: string, role: 'payer' | 'payout') 
   };
   await upsertWalletKey(doc);
   return doc;
+}
+
+export async function getWallets(userId: string) {
+  const payer = await getOrInitWallet(userId, 'payer');
+  const payout = await getOrInitWallet(userId, 'payout');
+  return { payer, payout };
+}
+
+export async function createDepositService(userId: string, role: 'payer' | 'payout', amount: number, simulate?: boolean) {
+  const depId = 'dep_' + crypto.randomUUID();
+  await insertDeposit({ _id: depId, user_id: userId, wallet_role: role, amount, state: simulate ? 'confirmed' : 'pending', instructions: null as any, created_at: new Date().toISOString() });
+  if (simulate) {
+    await creditWallet(userId, role, amount, 'deposit', depId);
+  }
+  return { id: depId, instructions: null as any };
+}
+
+export async function createWithdrawalService(userId: string, role: 'payer' | 'payout', amount: number, to: string) {
+  const wId = 'wd_' + crypto.randomUUID();
+  await debitWallet(userId, role, amount, 'withdrawal', wId);
+  await insertWithdrawal({ _id: wId, user_id: userId, wallet_role: role, amount, to, state: 'pending', created_at: new Date().toISOString() });
+  await updateWithdrawal(wId, { state: 'sent', tx_hash: undefined });
+  return { id: wId, tx_hash: null as any };
 }

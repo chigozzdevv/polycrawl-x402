@@ -9,3 +9,5 @@ server/.env.*
 .DS_Store
 coverage/
 *.log
+.tap-keys/
+server/.tap-keys/

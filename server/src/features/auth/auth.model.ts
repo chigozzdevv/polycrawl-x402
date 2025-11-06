@@ -11,3 +11,8 @@ export async function insertUser(doc: UserDoc) {
   const db = await getDb();
   await db.collection<UserDoc>('users').insertOne(doc as any);
 }
+
+export async function findUserById(id: string) {
+  const db = await getDb();
+  return (await db.collection<UserDoc>('users').findOne({ _id: id } as any)) || null;
+}

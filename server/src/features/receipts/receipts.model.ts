@@ -24,3 +24,13 @@ export async function createSignedReceipt(payload: any) {
   await db.collection<ReceiptDoc>('receipts').insertOne(doc as any);
   return { ...payload, sig: jwt };
 }
+
+export async function listRecentReceiptsByUserId(userId: string, limit = 5) {
+  const db = await getDb();
+  const cursor = db
+    .collection<ReceiptDoc>('receipts')
+    .find({ 'json.userId': userId } as any)
+    .sort({ ts: -1 })
+    .limit(limit);
+  return cursor.toArray();
+}

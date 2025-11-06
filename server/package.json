@@ -7,7 +7,9 @@
     "dev": "tsx -r tsconfig-paths/register src/server.ts",
     "start": "node --enable-source-maps dist/server.js",
     "build": "tsc -p tsconfig.json",
-    "setup:indexes": "tsx scripts/setup-indexes.js"
+    "setup:indexes": "tsx scripts/setup-indexes.js",
+    "tap:keygen": "tsx src/tap-proxy/keygen.ts",
+    "tap:proxy": "tsx src/tap-proxy/index.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",

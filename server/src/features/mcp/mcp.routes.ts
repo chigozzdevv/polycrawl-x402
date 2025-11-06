@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { requireTap } from '@/middleware/tap.js';
+import { requireTap } from '@/features/tap/tap.middleware.js';
 import { requireOAuth } from '@/middleware/oauth.js';
 import { discoverInput, discoverResult, fetchInput, fetchResult } from '@/features/mcp/mcp.schema.js';
 import { discoverController, fetchController } from '@/features/mcp/mcp.controller.js';
