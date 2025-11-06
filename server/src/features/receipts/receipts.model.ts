@@ -1,0 +1,26 @@
+import { SignJWT, importPKCS8 } from 'jose';
+import { getDb } from '@/config/db.js';
+import { loadEnv } from '@/config/env.js';
+
+type ReceiptDoc = { _id: string; request_id: string; json: any; ed25519_sig: string; ts: string };
+type SigningKey = Awaited<ReturnType<typeof importPKCS8>>;
+
+let keyPromise: Promise<SigningKey> | null = null;
+async function getSigningKey() {
+  if (!keyPromise) {
+    const { ED25519_PRIVATE_KEY } = process.env as any;
+    if (!ED25519_PRIVATE_KEY) throw new Error('ED25519_PRIVATE_KEY is required');
+    keyPromise = importPKCS8(ED25519_PRIVATE_KEY, 'EdDSA');
+  }
+  return keyPromise;
+}
+
+export async function createSignedReceipt(payload: any) {
+  const db = await getDb();
+  const key = await getSigningKey();
+  const ts = new Date().toISOString();
+  const jwt = await new SignJWT(payload).setProtectedHeader({ alg: 'EdDSA', typ: 'JWT' }).setIssuedAt().setExpirationTime('10y').sign(key);
+  const doc: ReceiptDoc = { _id: payload.id, request_id: payload.request_id || payload.id, json: payload, ed25519_sig: jwt, ts };
+  await db.collection<ReceiptDoc>('receipts').insertOne(doc as any);
+  return { ...payload, sig: jwt };
+}
