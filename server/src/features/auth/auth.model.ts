@@ -1,6 +1,6 @@
 import { getDb } from '@/config/db.js';
 
-export type UserDoc = { _id: string; name: string; email: string; password_hash: string; created_at: string };
+export type UserDoc = { _id: string; name: string; email: string; password_hash: string; roles: string[]; created_at: string };
 
 export async function findUserByEmail(email: string) {
   const db = await getDb();

@@ -91,6 +91,12 @@ export async function verifyTapRequest(req: FastifyRequest): Promise<string> {
     {
       async keyLookup(params) {
         paramsCaptured = params;
+
+        const tag = (params as any).tag ? String((params as any).tag) : undefined;
+        if (!tag || (tag !== 'agent-browser-auth' && tag !== 'agent-payer-auth')) {
+          throw new Error('TAP signature missing required tag (agent-browser-auth or agent-payer-auth)');
+        }
+
         const created = typeof params.created === 'number' ? params.created : undefined;
         const expires = typeof params.expires === 'number' ? params.expires : undefined;
         validateTimestamps(created, expires);

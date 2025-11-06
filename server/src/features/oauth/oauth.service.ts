@@ -1,0 +1,338 @@
+import { randomBytes, createHash } from 'node:crypto';
+import { loadEnv } from '@/config/env.js';
+import { SignJWT, jwtVerify, importPKCS8, exportJWK, importJWK } from 'jose';
+import {
+  findClientById,
+  generateAuthorizationCode,
+  generateClientId,
+  generateRefreshTokenValue,
+  hashToken,
+  insertAuthorizationCode,
+  insertClient,
+  insertRefreshToken,
+  consumeAuthorizationCode,
+  deleteAuthorizationCode,
+  findRefreshToken,
+  revokeRefreshToken,
+} from '@/features/oauth/oauth.model.js';
+import { ensureAgentForClient } from '@/features/agents/agents.service.js';
+
+type CreateClientParams = {
+  client_name?: string;
+  redirect_uris: string[];
+  token_endpoint_auth_method?: string;
+  scope?: string;
+};
+
+type RegisterClientResult = {
+  client_id: string;
+  token_endpoint_auth_method: 'none';
+  client_id_issued_at: number;
+  redirect_uris: string[];
+  client_name?: string;
+  scope?: string;
+};
+
+type AuthorizationInput = {
+  client_id: string;
+  user_id: string;
+  redirect_uri: string;
+  code_challenge: string;
+  resource: string;
+  code_challenge_method: 'S256';
+  scope: string[];
+};
+
+type TokenPayload = {
+  sub: string;
+  aud: string;
+  client_id: string;
+  scope: string[];
+  resource: string;
+  agent_id: string;
+};
+
+type AccessTokenResult = {
+  access_token: string;
+  expires_in: number;
+  refresh_token: string;
+  refresh_token_expires_in: number;
+  scope: string;
+  token_type: 'Bearer';
+  resource: string;
+  agent_id: string;
+};
+
+let signingKeyPromise: Promise<any> | null = null;
+let verificationKeyPromise: Promise<any> | null = null;
+let publicJwkPromise: Promise<Record<string, any>> | null = null;
+let kidPromise: Promise<string> | null = null;
+
+function nowSeconds() {
+  return Math.floor(Date.now() / 1000);
+}
+
+function loadConfig() {
+  const env = loadEnv();
+  const issuer = env.OAUTH_ISSUER || 'https://polycrawl.local';
+  const resource = env.OAUTH_RESOURCE || `${issuer}/mcp`;
+  const accessTtl = Number(env.OAUTH_ACCESS_TOKEN_TTL || 300);
+  const refreshTtl = Number(env.OAUTH_REFRESH_TOKEN_TTL || (60 * 60 * 24 * 30));
+  return { issuer, resource, accessTtl, refreshTtl };
+}
+
+async function getSigningKey() {
+  if (!signingKeyPromise) {
+    const { ED25519_PRIVATE_KEY } = process.env as any;
+    if (!ED25519_PRIVATE_KEY) throw new Error('ED25519_PRIVATE_KEY is required for OAuth signing');
+    signingKeyPromise = importPKCS8(ED25519_PRIVATE_KEY, 'EdDSA');
+  }
+  return signingKeyPromise;
+}
+
+async function getVerificationKey() {
+  if (!verificationKeyPromise) {
+    const jwk = await getPublicJwk();
+    verificationKeyPromise = importJWK(jwk as any, 'EdDSA') as Promise<any>;
+  }
+  return verificationKeyPromise;
+}
+
+async function getPublicJwk() {
+  if (!publicJwkPromise) {
+    const privateKey = await getSigningKey();
+    const jwk = await exportJWK(privateKey);
+    delete (jwk as any).d;
+    jwk.use = 'sig';
+    jwk.alg = 'EdDSA';
+    jwk.kty = 'OKP';
+    jwk.crv = 'Ed25519';
+    jwk.kid = await getKid();
+    publicJwkPromise = Promise.resolve(jwk);
+  }
+  return publicJwkPromise;
+}
+
+async function getKid() {
+  if (!kidPromise) {
+    const jwk = await exportJWK(await getSigningKey());
+    const keyMaterial = Buffer.from(jwk.x as string, 'base64url');
+    const hash = createHash('sha256').update(keyMaterial).digest('base64url');
+    kidPromise = Promise.resolve(hash);
+  }
+  return kidPromise;
+}
+
+export async function getJwksResponse() {
+  const jwk = await getPublicJwk();
+  return { keys: [jwk] };
+}
+
+export async function registerClient(params: CreateClientParams): Promise<RegisterClientResult> {
+  const client_id = generateClientId();
+  const doc = {
+    _id: client_id,
+    client_name: params.client_name,
+    redirect_uris: params.redirect_uris,
+    token_endpoint_auth_method: 'none' as const,
+    scope: params.scope,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  await insertClient(doc);
+  return {
+    client_id,
+    client_name: doc.client_name,
+    redirect_uris: doc.redirect_uris,
+    token_endpoint_auth_method: 'none',
+    client_id_issued_at: Math.floor(Date.now() / 1000),
+    scope: doc.scope,
+  };
+}
+
+export async function createAuthorizationCode(input: AuthorizationInput) {
+  const code = generateAuthorizationCode();
+  const expires_at = new Date(Date.now() + 5 * 60 * 1000);
+  await insertAuthorizationCode({
+    _id: code,
+    client_id: input.client_id,
+    user_id: input.user_id,
+    redirect_uri: input.redirect_uri,
+    code_challenge: input.code_challenge,
+    code_challenge_method: input.code_challenge_method,
+    resource: input.resource,
+    scope: input.scope,
+    expires_at,
+    created_at: new Date(),
+  });
+  return code;
+}
+
+export async function issueTokensFromCode(code: string, redirectUri: string, codeVerifier: string, resource: string) {
+  const codeDoc = await consumeAuthorizationCode(code);
+  if (!codeDoc) throw new Error('invalid_grant');
+  if (codeDoc.redirect_uri !== redirectUri) {
+    await deleteAuthorizationCode(code);
+    throw new Error('invalid_grant');
+  }
+  if (codeDoc.expires_at.getTime() < Date.now()) {
+    await deleteAuthorizationCode(code);
+    throw new Error('invalid_grant');
+  }
+  if (codeDoc.resource !== resource) {
+    await deleteAuthorizationCode(code);
+    throw new Error('invalid_target');
+  }
+  const expectedChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
+  if (expectedChallenge !== codeDoc.code_challenge) {
+    await deleteAuthorizationCode(code);
+    throw new Error('invalid_grant');
+  }
+  const clientIdStr = String(codeDoc.client_id);
+  const userIdStr = String(codeDoc.user_id);
+  const agentId = await ensureAgentForClient(userIdStr, clientIdStr);
+  const resourceStr = String(codeDoc.resource);
+  const tokens = await createTokenResponse({
+    sub: userIdStr,
+    client_id: clientIdStr,
+    scope: codeDoc.scope,
+    resource: resourceStr,
+    aud: resourceStr,
+    agent_id: agentId,
+  } as TokenPayload);
+  return tokens;
+}
+
+async function createTokenResponse(payload: TokenPayload, previousRefreshId?: string): Promise<AccessTokenResult> {
+  const { issuer, accessTtl, refreshTtl } = loadConfig();
+  const key = await getSigningKey();
+  const exp = nowSeconds() + accessTtl;
+  const jti = randomBytes(16).toString('base64url');
+  const accessToken = await new SignJWT({
+    sub: payload.sub,
+    aud: payload.aud,
+    client_id: payload.client_id,
+    scope: payload.scope,
+    resource: payload.resource,
+    agent_id: payload.agent_id,
+    jti,
+  })
+    .setProtectedHeader({ alg: 'EdDSA', kid: await getKid() })
+    .setIssuer(issuer)
+    .setIssuedAt()
+    .setExpirationTime(exp)
+    .sign(key);
+
+  const refreshValue = generateRefreshTokenValue();
+  const refreshTokenDoc = {
+    _id: 'rt_' + randomBytes(24).toString('hex'),
+    client_id: payload.client_id,
+    user_id: payload.sub,
+    hashed_token: hashToken(refreshValue),
+    scope: payload.scope,
+    resource: payload.resource,
+    created_at: new Date(),
+    expires_at: new Date(Date.now() + refreshTtl * 1000),
+    agent_id: payload.agent_id,
+  };
+  await insertRefreshToken(refreshTokenDoc);
+  if (previousRefreshId) {
+    await revokeRefreshToken(previousRefreshId);
+  }
+
+  return {
+    access_token: accessToken,
+    expires_in: accessTtl,
+    refresh_token: refreshValue,
+    refresh_token_expires_in: refreshTtl,
+    scope: payload.scope.join(' '),
+    token_type: 'Bearer',
+    resource: payload.resource,
+    agent_id: payload.agent_id,
+  };
+}
+
+export async function issueTokensFromRefreshToken(refreshToken: string, clientId: string, resource: string) {
+  const hashed = hashToken(refreshToken);
+  const doc = await findRefreshToken(hashed);
+  if (!doc) throw new Error('invalid_grant');
+  const storedClientId = String(doc.client_id);
+  if (storedClientId !== clientId) throw new Error('invalid_client');
+  if (doc.expires_at.getTime() < Date.now()) throw new Error('invalid_grant');
+  if (doc.resource !== resource) throw new Error('invalid_target');
+
+  const userIdStr = String(doc.user_id);
+  const agentId = await ensureAgentForClient(userIdStr, storedClientId);
+  const resourceStr = String(doc.resource);
+  const tokens = await createTokenResponse({
+    sub: userIdStr,
+    client_id: storedClientId,
+    scope: doc.scope,
+    resource: resourceStr,
+    aud: resourceStr,
+    agent_id: agentId,
+  } as TokenPayload, String(doc._id));
+  return tokens;
+}
+
+export async function verifyAccessToken(token: string) {
+  const { issuer, resource } = loadConfig();
+  const key = await getVerificationKey();
+  const { payload } = await jwtVerify(token, key, { issuer });
+  if (typeof payload.aud !== 'string' || payload.aud !== resource) {
+    throw new Error('invalid_token');
+  }
+  if (!payload.client_id || typeof payload.client_id !== 'string') {
+    throw new Error('invalid_token');
+  }
+  if (!payload.sub || typeof payload.sub !== 'string') {
+    throw new Error('invalid_token');
+  }
+  const rawScope = payload.scope;
+  const scopes = Array.isArray(rawScope)
+    ? (rawScope as string[])
+    : typeof rawScope === 'string'
+      ? rawScope.split(' ').filter(Boolean)
+      : [];
+  if (scopes.length === 0) {
+    throw new Error('invalid_token');
+  }
+  const agentId = typeof payload.agent_id === 'string' ? payload.agent_id : undefined;
+  return {
+    userId: payload.sub,
+    clientId: payload.client_id,
+    scopes,
+    resource: payload.aud,
+    agentId,
+  };
+}
+
+export async function ensureClientExists(clientId: string) {
+  const client = await findClientById(clientId);
+  if (!client) throw new Error('invalid_client');
+  return client;
+}
+
+export function buildProtectedResourceMetadata(baseUrl: string) {
+  const { resource } = loadConfig();
+  return {
+    resource,
+    authorization_servers: [`${baseUrl}/.well-known/oauth-authorization-server`],
+  };
+}
+
+export function buildAuthorizationServerMetadata(baseUrl: string) {
+  return {
+    issuer: baseUrl,
+    authorization_endpoint: `${baseUrl}/oauth/authorize`,
+    token_endpoint: `${baseUrl}/oauth/token`,
+    registration_endpoint: `${baseUrl}/oauth/register`,
+    jwks_uri: `${baseUrl}/.well-known/oauth-jwks.json`,
+    response_types_supported: ['code'],
+    grant_types_supported: ['authorization_code', 'refresh_token'],
+    code_challenge_methods_supported: ['S256'],
+    token_endpoint_auth_methods_supported: ['none'],
+    scopes_supported: ['mcp'],
+    claims_supported: ['sub', 'aud', 'iss', 'exp', 'scope', 'client_id', 'jti', 'agent_id'],
+  };
+}

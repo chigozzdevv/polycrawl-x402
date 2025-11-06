@@ -3,6 +3,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { randomUUID } from 'node:crypto';
 import { discoverService, fetchService } from '@/features/mcp/mcp.service.js';
 import { discoverInput, discoverResult, fetchInput, fetchResult, type DiscoverInput, type FetchInput } from '@/features/mcp/mcp.schema.js';
+import { getSessionContext, setSessionContext, clearSessionContext } from '@/services/oauth/session-store.js';
 
 export type McpRuntime = {
   server: McpServer;
@@ -24,7 +25,15 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
       inputSchema: discoverInput,
       outputSchema: discoverResult,
     } as any,
-    (async (args: DiscoverInput) => {
+    (async (args: DiscoverInput, extra: any) => {
+      const context = getSessionContext(extra?.sessionId);
+      if (!context) {
+        return {
+          isError: true,
+          structuredContent: { error: 'OAUTH_REQUIRED' },
+          content: [{ type: 'text' as const, text: 'OAUTH_REQUIRED' }],
+        };
+      }
       const out = await discoverService({ query: args.query, filters: args.filters });
       return {
         structuredContent: out,
@@ -41,8 +50,8 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
       inputSchema: fetchInput,
       outputSchema: fetchResult,
     } as any,
-    (async (args: FetchInput) => {
-      const { resourceId, mode, constraints, agentKey } = args;
+    (async (args: FetchInput, extra: any) => {
+      const { resourceId, mode, constraints } = args;
       if (!resourceId) {
         return {
           isError: true,
@@ -51,15 +60,23 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
         };
       }
 
-      if (!agentKey) {
+      const context = getSessionContext(extra?.sessionId);
+      if (!context) {
         return {
           isError: true,
-          structuredContent: { error: 'AGENT_AUTH_REQUIRED' },
-          content: [{ type: 'text' as const, text: 'AGENT_AUTH_REQUIRED' }],
+          structuredContent: { error: 'OAUTH_REQUIRED' },
+          content: [{ type: 'text' as const, text: 'OAUTH_REQUIRED' }],
         };
       }
 
-      const out = await fetchService({ agentKey, resourceId, mode, constraints });
+      const out = await fetchService({
+        userId: context.userId,
+        clientId: context.clientId,
+        agentId: context.agentId,
+        resourceId,
+        mode,
+        constraints,
+      });
 
       if (out.status !== 200) {
         const payload = { error: out.error, quote: (out as any).quote };
@@ -81,6 +98,13 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
     enableJsonResponse: true,
+    onsessioninitialized: (sessionId: string) => {
+      const ctx = getSessionContext();
+      if (ctx) setSessionContext(sessionId, ctx);
+    },
+    onsessionclosed: (sessionId: string) => {
+      clearSessionContext(sessionId);
+    },
   });
 
   await server.connect(transport);

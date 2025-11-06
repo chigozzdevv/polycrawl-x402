@@ -13,7 +13,7 @@ export async function signupController(req: FastifyRequest, reply: FastifyReply)
   if (existing) return reply.code(409).send({ error: 'EMAIL_EXISTS' });
   const hash = await argon2.hash(body.password);
   const userId = 'u_' + randomUUID();
-  await insertUser({ _id: userId, name: body.name, email: body.email, password_hash: hash, created_at: new Date().toISOString() });
+  await insertUser({ _id: userId, name: body.name, email: body.email, password_hash: hash, roles: ['user'], created_at: new Date().toISOString() });
   await initUserWallets(userId);
   return reply.send({ userId });
 }

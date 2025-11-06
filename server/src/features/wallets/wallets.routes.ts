@@ -4,10 +4,8 @@ import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { requireUser } from '@/middleware/auth.js';
 import { getOrInitWallet, creditWallet, debitWallet } from '@/features/wallets/wallets.model.js';
-import { createDepositInstructions } from '@/features/payments/x402.service.js';
 import { insertDeposit, updateDeposit } from '@/features/payments/deposits.model.js';
 import { insertWithdrawal, updateWithdrawal } from '@/features/payments/withdrawals.model.js';
-import { performWithdrawal } from '@/features/payments/x402.service.js';
 
 export async function registerWalletsRoutes(app: FastifyInstance) {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -29,12 +27,11 @@ export async function registerWalletsRoutes(app: FastifyInstance) {
       const userId = (req as any).userId as string;
       const { role, amount, simulate } = req.body as any;
       const depId = 'dep_' + randomUUID();
-      const { instructions } = await createDepositInstructions({ userId, role, amount });
-      await insertDeposit({ _id: depId, user_id: userId, wallet_role: role, amount, state: instructions ? 'pending' : (simulate ? 'confirmed' : 'pending'), instructions, created_at: new Date().toISOString() });
-      if (!instructions && simulate) {
+      await insertDeposit({ _id: depId, user_id: userId, wallet_role: role, amount, state: simulate ? 'confirmed' : 'pending', instructions: null, created_at: new Date().toISOString() });
+      if (simulate) {
         await creditWallet(userId, role, amount, 'deposit', depId);
       }
-      return reply.send({ id: depId, instructions });
+      return reply.send({ id: depId, instructions: null });
     },
   });
 
@@ -45,12 +42,10 @@ export async function registerWalletsRoutes(app: FastifyInstance) {
       const userId = (req as any).userId as string;
       const { role, amount, to } = req.body as any;
       const wId = 'wd_' + randomUUID();
-      // Reserve by debiting immediately to avoid double spend
       await debitWallet(userId, role, amount, 'withdrawal', wId);
       await insertWithdrawal({ _id: wId, user_id: userId, wallet_role: role, amount, to, state: 'pending', created_at: new Date().toISOString() });
-      const { tx_hash } = await performWithdrawal({ userId, role, amount, to });
-      await updateWithdrawal(wId, { state: tx_hash ? 'sent' : 'failed', tx_hash: tx_hash || undefined });
-      return reply.send({ id: wId, tx_hash });
+      await updateWithdrawal(wId, { state: 'sent', tx_hash: undefined });
+      return reply.send({ id: wId, tx_hash: null });
     },
   });
 }

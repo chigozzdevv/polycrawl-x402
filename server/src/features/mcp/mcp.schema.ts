@@ -37,7 +37,6 @@ export const fetchInput = z
     constraints: z
       .object({ maxCost: z.number().positive().optional(), maxBytes: z.number().positive().optional() })
       .optional(),
-    agentKey: z.string().min(1).optional(),
   })
   .refine((v) => !!(v.resourceId || v.url), { message: 'resourceId or url required' });
 

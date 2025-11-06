@@ -10,6 +10,7 @@ export type ResourceDoc = {
   path?: string;
   tags?: string[];
   summary?: string;
+  sample_preview?: string;
   schema?: string[]; // optional columns for CSV/JSON
   size_bytes?: number;
   price_per_kb?: number;
@@ -21,6 +22,7 @@ export type ResourceDoc = {
   connector_id?: string;
   storage_ref?: string; // cloudinary public id or URL
   verified?: boolean;
+  avg_latency_ms?: number;
 };
 
 export async function findResourceById(id: string) {

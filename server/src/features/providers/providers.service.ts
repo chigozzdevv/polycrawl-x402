@@ -3,6 +3,16 @@ import { getDb } from '@/config/db.js';
 import type { ResourceDoc } from '@/features/resources/resources.model.js';
 import { getCloudinary } from '@/utils/cloudinary.js';
 
+export async function getOrCreateProvider(userId: string) {
+  const db = await getDb();
+  const provider = await db.collection('providers').findOne({ user_id: userId });
+  if (provider) return provider;
+  const providerId = 'prov_' + randomUUID();
+  const doc = { _id: providerId, user_id: userId, created_at: new Date().toISOString() };
+  await db.collection('providers').insertOne(doc as any);
+  return doc;
+}
+
 export async function createResource(userId: string, input: Omit<ResourceDoc, '_id' | 'provider_id' | 'updated_at' | 'verified'>) {
   const db = await getDb();
   const provider = await db.collection('providers').findOne({ user_id: userId });

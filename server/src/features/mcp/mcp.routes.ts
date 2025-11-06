@@ -1,9 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { requireTap } from '@/middleware/tap.js';
+import { requireOAuth } from '@/middleware/oauth.js';
 import { discoverInput, discoverResult, fetchInput, fetchResult } from '@/features/mcp/mcp.schema.js';
 import { discoverController, fetchController } from '@/features/mcp/mcp.controller.js';
 import { createMcpRuntime } from '@/features/mcp/mcp.sdk.js';
+import { runWithRequestContext, setSessionContext } from '@/services/oauth/session-store.js';
 
 export async function registerMcpRoutes(app: FastifyInstance) {
   const runtime = await createMcpRuntime();
@@ -12,12 +14,22 @@ export async function registerMcpRoutes(app: FastifyInstance) {
     method: ['GET', 'POST', 'DELETE'],
     url: '/',
     handler: async (req, reply) => {
+      await requireOAuth(req, reply);
+      if (reply.sent) return;
       await requireTap(req, reply);
       if (reply.sent) return;
 
       reply.hijack();
       try {
-        await runtime.transport.handleRequest(req.raw, reply.raw, (req as any).body);
+        const oauth = (req as any).oauth;
+        const incomingSession = req.headers['mcp-session-id'];
+        if (oauth && typeof incomingSession === 'string') {
+          setSessionContext(incomingSession, oauth);
+        }
+        const context = oauth;
+        await runWithRequestContext(context, async () => {
+          await runtime.transport.handleRequest(req.raw, reply.raw, (req as any).body);
+        });
       } catch (err) {
         app.log.error({ err }, 'mcp_transport_error');
         if (!reply.raw.headersSent) {
@@ -36,13 +48,13 @@ export async function registerMcpRoutes(app: FastifyInstance) {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
   r.post('/tools/discover_resources', {
-    preHandler: [requireTap],
+    preHandler: [requireOAuth, requireTap],
     schema: { body: discoverInput, response: { 200: discoverResult } },
     handler: discoverController,
   });
 
   r.post('/tools/fetch_content', {
-    preHandler: [requireTap],
+    preHandler: [requireOAuth, requireTap],
     schema: { body: fetchInput, response: { 200: fetchResult } },
     handler: fetchController,
   });

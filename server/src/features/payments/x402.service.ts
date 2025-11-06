@@ -1,36 +1,89 @@
 import { loadEnv } from '@/config/env.js';
 
-export async function recordX402Settlement(params: { requestId: string; amount: number; payerUserId: string; providerUserId: string }) {
+type VerifyPaymentRequest = {
+  scheme: string;
+  network: string;
+  signature: string;
+  authorization: string;
+  amount: string;
+  currency: string;
+  from: string;
+  to: string;
+  nonce: string;
+  validAfter: number;
+  validBefore: number;
+};
+
+type VerifyPaymentResponse = {
+  valid: boolean;
+  reason?: string;
+};
+
+type SettlePaymentRequest = {
+  scheme: string;
+  network: string;
+  signature: string;
+  authorization: string;
+  amount: string;
+  currency: string;
+  from: string;
+  to: string;
+  nonce: string;
+  validAfter: number;
+  validBefore: number;
+};
+
+type SettlePaymentResponse = {
+  txHash: string;
+  status: 'pending' | 'confirmed' | 'failed';
+};
+
+export async function verifyX402Payment(payment: VerifyPaymentRequest): Promise<VerifyPaymentResponse> {
   const { X402_FACILITATOR_URL } = loadEnv();
-  if (!X402_FACILITATOR_URL) return null;
-  const res = await fetch(X402_FACILITATOR_URL + '/settlements', {
+  if (!X402_FACILITATOR_URL) throw new Error('X402_FACILITATOR_URL not configured');
+
+  const res = await fetch(X402_FACILITATOR_URL + '/verify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    body: JSON.stringify(payment),
   });
-  if (!res.ok) return null;
-  const data = (await res.json()) as { tx_hash?: string };
-  return data.tx_hash || null;
+
+  if (!res.ok) {
+    const error = await res.text().catch(() => 'Unknown error');
+    throw new Error(`X402 verify failed: ${error}`);
+  }
+
+  return await res.json();
 }
 
-export async function createDepositInstructions(params: { userId: string; role: 'payer' | 'payout'; amount: number }) {
+export async function settleX402Payment(payment: SettlePaymentRequest): Promise<SettlePaymentResponse> {
   const { X402_FACILITATOR_URL } = loadEnv();
-  if (!X402_FACILITATOR_URL) return { instructions: null };
-  const res = await fetch(X402_FACILITATOR_URL + '/deposits', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params),
+  if (!X402_FACILITATOR_URL) throw new Error('X402_FACILITATOR_URL not configured');
+
+  const res = await fetch(X402_FACILITATOR_URL + '/settle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payment),
   });
-  if (!res.ok) return { instructions: null };
-  const data = await res.json();
-  return { instructions: data };
+
+  if (!res.ok) {
+    const error = await res.text().catch(() => 'Unknown error');
+    throw new Error(`X402 settle failed: ${error}`);
+  }
+
+  return await res.json();
 }
 
-export async function performWithdrawal(params: { userId: string; role: 'payer' | 'payout'; amount: number; to: string }) {
+export async function getSupportedNetworks(): Promise<{ scheme: string; network: string }[]> {
   const { X402_FACILITATOR_URL } = loadEnv();
-  if (!X402_FACILITATOR_URL) return { tx_hash: null };
-  const res = await fetch(X402_FACILITATOR_URL + '/withdrawals', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params),
-  });
-  if (!res.ok) return { tx_hash: null };
-  const data = await res.json();
-  return { tx_hash: data?.tx_hash ?? null };
+  if (!X402_FACILITATOR_URL) return [];
+
+  try {
+    const res = await fetch(X402_FACILITATOR_URL + '/supported');
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.networks || [];
+  } catch {
+    return [];
+  }
 }

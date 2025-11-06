@@ -6,6 +6,7 @@ export type AgentDoc = {
   name: string;
   client_key: string; // bearer token
   tap_agent_id?: string;
+  client_id?: string;
   status?: 'active' | 'revoked';
 };
 

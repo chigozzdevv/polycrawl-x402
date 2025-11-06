@@ -14,6 +14,10 @@ const EnvSchema = z.object({
   KEY_ENCRYPTION_KEY: z.string().min(16).optional(),
   X402_FACILITATOR_URL: z.string().url().optional(),
   PLATFORM_FEE_BPS: z.string().optional(),
+  OAUTH_ISSUER: z.string().url().optional(),
+  OAUTH_RESOURCE: z.string().url().optional(),
+  OAUTH_ACCESS_TOKEN_TTL: z.string().optional(),
+  OAUTH_REFRESH_TOKEN_TTL: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
