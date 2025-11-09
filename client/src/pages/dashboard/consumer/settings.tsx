@@ -11,9 +11,9 @@ export function ConsumerSettingsPage() {
   const [walletLoading, setWalletLoading] = useState(false)
 
   const [activeTab, setActiveTab] = useState<'caps' | 'payout' | 'security'>('caps')
-  const [changeToken, setChangeToken] = useState('')
-  const [changePassword, setChangePassword] = useState('')
-  const [changeConfirm, setChangeConfirm] = useState('')
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [changeStatus, setChangeStatus] = useState<{ tone: 'success' | 'error'; message: string } | null>(null)
   const [changeLoading, setChangeLoading] = useState(false)
 
@@ -39,32 +39,32 @@ export function ConsumerSettingsPage() {
   }
 
   const tabs: Array<{ id: 'caps' | 'payout' | 'security'; label: string }> = [
-    { id: 'caps', label: 'Spending Caps' },
+    { id: 'caps', label: 'Caps' },
     { id: 'payout', label: 'Payout' },
     { id: 'security', label: 'Security' },
   ]
 
   const handleChangePassword = async () => {
     setChangeStatus(null)
-    if (!changeToken.trim()) {
-      setChangeStatus({ tone: 'error', message: 'Reset token is required' })
+    if (currentPassword.length < 8) {
+      setChangeStatus({ tone: 'error', message: 'Current password must be at least 8 characters' })
       return
     }
-    if (changePassword.length < 8) {
+    if (newPassword.length < 8) {
       setChangeStatus({ tone: 'error', message: 'New password must be at least 8 characters' })
       return
     }
-    if (changePassword !== changeConfirm) {
+    if (newPassword !== confirmPassword) {
       setChangeStatus({ tone: 'error', message: 'Passwords do not match' })
       return
     }
     setChangeLoading(true)
     try {
-      await api.resetPassword(changeToken.trim(), changePassword)
+      await api.changePassword(currentPassword, newPassword)
       setChangeStatus({ tone: 'success', message: 'Password updated successfully' })
-      setChangeToken('')
-      setChangePassword('')
-      setChangeConfirm('')
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
     } catch (err: any) {
       setChangeStatus({ tone: 'error', message: err.message || 'Unable to update password' })
     } finally {
@@ -74,12 +74,6 @@ export function ConsumerSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-xs uppercase tracking-[0.35em] text-sand/60">Settings</p>
-        <h2 className="text-2xl font-semibold text-parchment">Manage account</h2>
-        <p className="text-sm text-fog">Tweak caps, payouts, and security controls.</p>
-      </div>
-
       <div className="flex gap-2 overflow-x-auto pb-2">
         {tabs.map((tab) => (
           <button
@@ -148,25 +142,26 @@ export function ConsumerSettingsPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-parchment">Change password</p>
-                  <p className="text-xs text-fog">Paste the reset token and choose a new password.</p>
+                  <p className="text-xs text-fog">Update your credentials securely from here.</p>
                 </div>
               </div>
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs uppercase tracking-[0.2em] text-fog">Reset token</label>
+                  <label className="text-xs uppercase tracking-[0.2em] text-fog">Current password</label>
                   <input
-                    value={changeToken}
-                    onChange={(event) => setChangeToken(event.target.value)}
+                    type="password"
+                    value={currentPassword}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
                     className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-parchment outline-none focus:border-sand/50"
-                    placeholder="Paste token from email"
+                    placeholder="Enter your current password"
                   />
                 </div>
                 <div>
                   <label className="text-xs uppercase tracking-[0.2em] text-fog">New password</label>
                   <input
                     type="password"
-                    value={changePassword}
-                    onChange={(event) => setChangePassword(event.target.value)}
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
                     className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-parchment outline-none focus:border-sand/50"
                   />
                 </div>
@@ -174,8 +169,8 @@ export function ConsumerSettingsPage() {
                   <label className="text-xs uppercase tracking-[0.2em] text-fog">Confirm password</label>
                   <input
                     type="password"
-                    value={changeConfirm}
-                    onChange={(event) => setChangeConfirm(event.target.value)}
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
                     className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-parchment outline-none focus:border-sand/50"
                   />
                 </div>

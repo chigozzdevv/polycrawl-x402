@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { requireUser } from '@/middleware/auth.js';
-import { listResourcesController, getResourceController, createResourceController } from '@/features/resources/resources.controller.js';
+import { listResourcesController, getResourceController, createResourceController, updateResourceController, deleteResourceController, listCatalogResourcesController } from '@/features/resources/resources.controller.js';
 import { createResourceInput } from '@/features/resources/resources.schema.js';
 
 export async function registerResourcesRoutes(app: FastifyInstance) {
@@ -10,4 +10,7 @@ export async function registerResourcesRoutes(app: FastifyInstance) {
   r.get('/resources', { preHandler: [requireUser] }, listResourcesController);
   r.get('/resources/:id', { preHandler: [requireUser] }, getResourceController);
   r.post('/resources', { preHandler: [requireUser], schema: { body: createResourceInput } }, createResourceController);
+  r.put('/resources/:id', { preHandler: [requireUser], schema: { body: createResourceInput.partial() } }, updateResourceController);
+  r.delete('/resources/:id', { preHandler: [requireUser] }, deleteResourceController);
+  r.get('/catalog/resources', { schema: { } }, listCatalogResourcesController);
 }

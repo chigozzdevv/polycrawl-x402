@@ -1,31 +1,62 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { signupInput, loginInput } from '@/features/auth/auth.schema.js';
-import { findUserByEmail, insertUser } from '@/features/auth/auth.model.js';
-import argon2 from 'argon2';
-import { SignJWT } from 'jose';
-import { randomUUID } from 'node:crypto';
-import { loadEnv } from '@/config/env.js';
-import { initUserWallets } from '@/features/wallets/wallets.service.js';
+import { signupInput, loginInput, forgotPasswordInput, resetPasswordInput, walletChallengeInput, walletVerifyInput, changePasswordInput } from '@/features/auth/auth.schema.js';
+import { createWalletChallenge, performPasswordReset, requestPasswordReset, verifyWalletLink, walletLogin, signupService, loginService, changeUserPassword } from '@/features/auth/auth.service.js';
 
 export async function signupController(req: FastifyRequest, reply: FastifyReply) {
   const body = signupInput.parse(req.body);
-  const existing = await findUserByEmail(body.email);
-  if (existing) return reply.code(409).send({ error: 'EMAIL_EXISTS' });
-  const hash = await argon2.hash(body.password);
-  const userId = 'u_' + randomUUID();
-  await insertUser({ _id: userId, name: body.name, email: body.email, password_hash: hash, roles: ['user'], created_at: new Date().toISOString() });
-  await initUserWallets(userId);
-  return reply.send({ userId });
+  const res = await signupService(body.name, body.email, body.password);
+  if (!res.ok) return reply.code(409).send({ error: res.error });
+  return reply.send(res.auth);
 }
 
 export async function loginController(req: FastifyRequest, reply: FastifyReply) {
   const body = loginInput.parse(req.body);
-  const user = await findUserByEmail(body.email);
-  if (!user) return reply.code(401).send({ error: 'INVALID_CREDENTIALS' });
-  const ok = await argon2.verify(user.password_hash, body.password);
-  if (!ok) return reply.code(401).send({ error: 'INVALID_CREDENTIALS' });
-  const env = loadEnv();
-  if (!env.JWT_SECRET) return reply.code(500).send({ error: 'JWT_SECRET_MISSING' });
-  const token = await new SignJWT({ sub: user._id }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('7d').sign(new TextEncoder().encode(env.JWT_SECRET));
-  return reply.send({ token, userId: user._id });
+  const res = await loginService(body.email, body.password);
+  if (!res.ok) return reply.code(401).send({ error: res.error });
+  return reply.send(res.auth);
+}
+
+export async function forgotPasswordController(req: FastifyRequest, reply: FastifyReply) {
+  const body = forgotPasswordInput.parse(req.body);
+  await requestPasswordReset(body.email);
+  return reply.send({ ok: true });
+}
+
+export async function resetPasswordController(req: FastifyRequest, reply: FastifyReply) {
+  const body = resetPasswordInput.parse(req.body);
+  const res = await performPasswordReset(body.token, body.password);
+  if (!res.ok) return reply.code(400).send({ error: res.error });
+  return reply.send({ ok: true });
+}
+
+export async function changePasswordController(req: FastifyRequest, reply: FastifyReply) {
+  const body = changePasswordInput.parse(req.body);
+  const userId = (req as any).userId as string;
+  const res = await changeUserPassword(userId, body.currentPassword, body.newPassword);
+  if (!res.ok) {
+    const status = res.error === 'INVALID_CURRENT_PASSWORD' ? 400 : 404;
+    return reply.code(status).send({ error: res.error });
+  }
+  return reply.send({ ok: true });
+}
+
+export async function walletChallengeController(req: FastifyRequest, reply: FastifyReply) {
+  const body = walletChallengeInput.parse(req.body);
+  const ch = await createWalletChallenge(body.address, body.chain);
+  return reply.send(ch);
+}
+
+export async function walletLinkController(req: FastifyRequest, reply: FastifyReply) {
+  const body = walletVerifyInput.parse(req.body);
+  const userId = (req as any).userId as string;
+  const res = await verifyWalletLink(userId, body.address, body.chain, body.signature, body.nonce);
+  if (!res.ok) return reply.code(400).send({ error: res.error });
+  return reply.send({ ok: true });
+}
+
+export async function walletLoginController(req: FastifyRequest, reply: FastifyReply) {
+  const body = walletVerifyInput.parse(req.body);
+  const res = await walletLogin(body.address, body.chain, body.signature, body.nonce);
+  if (!res.ok) return reply.code(400).send({ error: res.error });
+  return reply.send(res.auth);
 }

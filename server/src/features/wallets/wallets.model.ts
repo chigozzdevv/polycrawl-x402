@@ -37,6 +37,7 @@ export async function createHold(userId: string, requestId: string, amount: numb
   const db = await getDb();
   const payer = await getOrInitWallet(userId, 'payer');
   if (payer.available < amount) throw new Error('INSUFFICIENT_FUNDS');
+  // Move funds from available→blocked and write ledger entry; the hold links to the request
   await db.collection<WalletDoc>('wallets').updateOne({ _id: payer._id }, { $inc: { available: -amount, blocked: amount } });
   const hold: HoldDoc = { _id: randomUUID(), wallet_id: payer._id, request_id: requestId, amount, state: 'held' };
   await db.collection<HoldDoc>('holds').insertOne(hold as any);
@@ -52,6 +53,7 @@ export async function releaseHold(holdId: string) {
   if (!hold || hold.state !== 'held') return;
   const wallet = await db.collection<WalletDoc>('wallets').findOne({ _id: hold.wallet_id });
   if (!wallet) return;
+  // Undo the hold: blocked→available, mark hold released
   await db.collection<WalletDoc>('wallets').updateOne({ _id: wallet._id }, { $inc: { available: hold.amount, blocked: -hold.amount } });
   await db.collection<HoldDoc>('holds').updateOne({ _id: holdId }, { $set: { state: 'released' } });
 }
@@ -60,19 +62,20 @@ export async function captureHold(holdId: string, finalAmount: number, providerU
   const db = await getDb();
   const hold = await db.collection<HoldDoc>('holds').findOne({ _id: holdId });
   if (!hold || hold.state !== 'held') throw new Error('HOLD_NOT_AVAILABLE');
+  if (finalAmount > hold.amount) throw new Error('FINAL_EXCEEDS_HOLD');
   const payerWallet = await db.collection<WalletDoc>('wallets').findOne({ _id: hold.wallet_id });
   if (!payerWallet) throw new Error('PAYER_WALLET_MISSING');
 
   const delta = hold.amount - finalAmount;
   const ops: any[] = [];
-  // decrease blocked by hold.amount, if delta>0 return to available
+  // Consume the hold: decrease blocked by full hold, return any delta to available
   ops.push({ updateOne: { filter: { _id: payerWallet._id }, update: { $inc: { blocked: -hold.amount, available: Math.max(0, delta) } } } });
 
-  // credit provider payout
+  // Credit provider’s internal payout wallet with net amount (after fee)
   const providerPayout = await getOrInitWallet(providerUserId, 'payout');
   ops.push({ updateOne: { filter: { _id: providerPayout._id }, update: { $inc: { available: finalAmount - feeAmount } } } });
 
-  // credit fee pool (system wallet)
+  // Credit platform fee wallet if applicable
   if (feeAmount > 0) {
     const feeWallet = await getFeeWallet();
     ops.push({ updateOne: { filter: { _id: feeWallet._id }, update: { $inc: { available: feeAmount } } } });
@@ -82,6 +85,7 @@ export async function captureHold(holdId: string, finalAmount: number, providerU
   await db.collection<HoldDoc>('holds').updateOne({ _id: holdId }, { $set: { state: 'captured' } });
 
   const now = new Date().toISOString();
+  // Mirror state transitions in the ledger for auditability
   const entries: LedgerDoc[] = [
     { _id: randomUUID(), wallet_id: payerWallet._id, type: 'debit', amount: finalAmount, ref_type: 'capture', ref_id: hold.request_id, ts: now } as any,
     { _id: randomUUID(), wallet_id: providerPayout._id, type: 'credit', amount: finalAmount - feeAmount, ref_type: 'capture', ref_id: hold.request_id, ts: now } as any,

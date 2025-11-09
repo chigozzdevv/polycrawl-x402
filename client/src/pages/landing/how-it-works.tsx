@@ -1,4 +1,5 @@
 import { Card, CardContent } from '@/components/ui/card'
+import { motion } from 'framer-motion'
 import { Bot, Wallet } from 'lucide-react'
 
 const agentSteps = [
@@ -45,10 +46,32 @@ const providerSteps = [
 export function HowItWorks() {
   return (
     <section id="how" className="mt-20">
-      <h2 className="text-center text-3xl font-medium tracking-tight md:text-4xl">How it works</h2>
+      <motion.h2
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.6 }}
+        className="text-center text-3xl font-medium tracking-tight md:text-4xl"
+      >
+        How it works
+      </motion.h2>
       <div className="mt-12 grid gap-8 lg:grid-cols-2">
-        <FlowCard title="For AI Agents" icon={Bot} steps={agentSteps} />
-        <FlowCard title="For Providers" icon={Wallet} steps={providerSteps} />
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+        >
+          <FlowCard title="For AI Agents" icon={Bot} steps={agentSteps} />
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+        >
+          <FlowCard title="For Providers" icon={Wallet} steps={providerSteps} />
+        </motion.div>
       </div>
     </section>
   )

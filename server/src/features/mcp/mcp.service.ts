@@ -9,7 +9,12 @@ import { findConnectorById } from '@/features/connectors/connectors.model.js';
 import { fetchViaConnector } from '@/features/connectors/connectors.service.js';
 import { checkSpendingCaps } from '@/features/caps/caps.service.js';
 import { createAgent } from '@/features/agents/agents.service.js';
+import { transferUsdc } from '@/services/solana/solana.service.js';
+import { findWalletKey } from '@/features/wallets/keys.model.js';
 
+export type PendingReceipt = { requestId: string; payload: Record<string, any> };
+
+// Ranks resources for a query; we blend text relevance with coarse cost/latency to prefer "good-enough and cheaper".
 export async function discoverService(params: { query: string; filters?: { format?: string[] }; userId?: string; agentId?: string }) {
   const list = await repoSearch(params.query, { format: params.filters?.format });
 
@@ -39,6 +44,7 @@ export async function discoverService(params: { query: string; filters?: { forma
     };
   });
 
+  // Simple heuristic scoring; higher relevance, lower price, lower latency → higher score.
   const scored = results.map(r => ({
     ...r,
     score: r.relevanceScore - (0.1 * (r.priceEstimate || 0)) - (0.0001 * r.latencyMs)
@@ -81,10 +87,15 @@ function computeRelevanceScore(query: string, resource: any): number {
   return Math.min(score, 1.0);
 }
 
-export async function fetchService(params: { userId: string; clientId: string; agentId?: string; resourceId: string; mode: 'raw' | 'summary'; constraints?: { maxCost?: number; maxBytes?: number } }) {
+// fetch content via connector, compute final cost, settle (internal or x402), then optionally pay provider on-chain and issue a signed receipt.
+export async function fetchService(
+  params: { userId: string; clientId: string; agentId?: string; resourceId: string; mode: 'raw' | 'summary'; constraints?: { maxCost?: number; maxBytes?: number } },
+  opts?: { settlementMode?: 'internal' | 'external' }
+) {
   const { userId, clientId, agentId, resourceId, mode, constraints } = params;
   const db = await getDb();
   const agentsColl = db.collection<any>('agents');
+  // Resolve or create an active agent context for this client/user
   let agent: any | null =
     agentId
       ? await agentsColl.findOne({ _id: agentId, user_id: userId, client_id: clientId, status: { $ne: 'revoked' } } as any)
@@ -96,7 +107,7 @@ export async function fetchService(params: { userId: string; clientId: string; a
   const resource = await getResourceById(resourceId);
   if (!resource) return { status: 404 as const, error: 'RESOURCE_NOT_FOUND' };
 
-  // Policy enforcement
+  // Policy enforcement (modes + visibility allowlist)
   const modes = (resource.modes || resource.policy?.modes) as any;
   if (modes && !modes.includes(mode)) return { status: 403 as const, error: 'MODE_NOT_ALLOWED' };
   const visibility = (resource.policy?.visibility || resource.visibility) as any;
@@ -105,6 +116,7 @@ export async function fetchService(params: { userId: string; clientId: string; a
     if (!allow.includes(activeAgent._id)) return { status: 403 as const, error: 'PROVIDER_POLICY_DENY' };
   }
 
+  // Persist request lifecycle; we will update status/cost after fetch/settlement
   const requestId = 'rq_' + randomUUID();
   const requests = db.collection<any>('requests');
   await requests.insertOne({
@@ -117,7 +129,14 @@ export async function fetchService(params: { userId: string; clientId: string; a
     ts: new Date().toISOString(),
   } as any);
 
-  const sameOwner = resource.provider_id === activeAgent.user_id;
+  const provider = await findProviderById(resource.provider_id);
+  if (!provider) {
+    await requests.updateOne({ _id: requestId } as any, { $set: { status: 'failed', failure_reason: 'PROVIDER_NOT_FOUND' } } as any);
+    return { status: 500 as const, error: 'PROVIDER_NOT_FOUND' };
+  }
+
+  // If the requester owns the resource, we waive pricing
+  const sameOwner = provider.user_id === activeAgent.user_id;
   const isFlat = typeof resource.price_flat === 'number' && resource.price_flat! > 0;
   const unitPrice = resource.price_per_kb ?? 0;
   const estBytes = resource.size_bytes ?? Math.min(constraints?.maxBytes ?? 256 * 1024, 10 * 1024 * 1024);
@@ -135,8 +154,10 @@ export async function fetchService(params: { userId: string; clientId: string; a
     }
   }
 
+  const settlementMode = opts?.settlementMode ?? 'internal';
+
   let holdId: string | null = null;
-  if (estCost > 0) {
+  if (settlementMode === 'internal' && estCost > 0) {
     try {
       const hold = await createHold(activeAgent.user_id, requestId, estCost);
       holdId = hold._id;
@@ -150,6 +171,7 @@ export async function fetchService(params: { userId: string; clientId: string; a
     let content: any = '';
     let bytesBilled = resource.size_bytes ?? estBytes;
 
+    // Retrieve content either via connector (stream/binary) or signed URL to stored asset
     if (resource.connector_id) {
       const connector = await findConnectorById(resource.connector_id);
       if (!connector) throw new Error('CONNECTOR_NOT_FOUND');
@@ -157,8 +179,8 @@ export async function fetchService(params: { userId: string; clientId: string; a
       if (fetched.kind === 'internal') {
         content = { url: signCloudinaryUrl(resource.storage_ref!) };
       } else {
+        // We bill based on actual bytes; minimal payload returned for large bodies to avoid memory bloat
         bytesBilled = fetched.bytes;
-        // For large binaries, you might store to Cloudinary and return a URL; return minimal for now
         content = { chunks: [Buffer.from(fetched.body).toString('base64')] };
       }
     } else if (resource.storage_ref) {
@@ -168,30 +190,37 @@ export async function fetchService(params: { userId: string; clientId: string; a
       return { status: 501 as const, error: 'NO_CONNECTOR' };
     }
 
-      const provider = await findProviderById(resource.provider_id);
-    if (!provider) {
-      if (holdId) await releaseHold(holdId);
-      return { status: 500 as const, error: 'PROVIDER_NOT_FOUND' };
-    }
-
     const finalCost = sameOwner ? 0 : (isFlat ? resource.price_flat! : Number(((unitPrice * (bytesBilled / 1024))).toFixed(6)));
-    if (finalCost > 0 && holdId) {
+    // Internal wallets: capture the hold and split fee to platform
+    if (settlementMode === 'internal' && finalCost > 0 && holdId) {
       const bps = Number(process.env.PLATFORM_FEE_BPS || '0');
       const feeAmount = Number(((finalCost * bps) / 10000).toFixed(6));
       await captureHold(holdId, finalCost, provider.user_id, feeAmount);
+      // prevent releasing a captured hold if subsequent steps throw
+      holdId = null;
     }
-    await requests.updateOne(
-      { _id: requestId } as any,
-      { $set: { status: 'settled', bytes_billed: bytesBilled, cost: finalCost } } as any
-    );
 
-      const base = {
-        id: 'rcpt_' + randomUUID(),
-        request_id: requestId,
-        resource: { id: resourceId, title: resource.title },
-        providerId: resource.provider_id,
-        userId: activeAgent.user_id,
-        agentId: activeAgent._id,
+    // Immediate on-chain payout to provider (USDC via Solana) using platform wallet
+    let providerSettlementTx: string | undefined;
+    if (settlementMode === 'internal' && finalCost > 0 && !sameOwner) {
+      const bps = Number(process.env.PLATFORM_FEE_BPS || '0');
+      const providerShare = Number((finalCost - Number(((finalCost * bps) / 10000).toFixed(6))).toFixed(6));
+      if (providerShare > 0) {
+        const key = await findWalletKey(provider.user_id, 'payout');
+        if (!key?.public_key) {
+          throw new Error('PROVIDER_PAYOUT_ADDRESS_MISSING');
+        }
+        providerSettlementTx = await transferUsdc(key.public_key, providerShare);
+      }
+    }
+
+    const receiptPayload = {
+      id: 'rcpt_' + randomUUID(),
+      request_id: requestId,
+      resource: { id: resourceId, title: resource.title },
+      providerId: resource.provider_id,
+      userId: activeAgent.user_id,
+      agentId: activeAgent._id,
       mode,
       bytes_billed: bytesBilled,
       unit_price: sameOwner ? undefined : (isFlat ? undefined : unitPrice),
@@ -210,12 +239,43 @@ export async function fetchService(params: { userId: string; clientId: string; a
           })()
         : [],
       x402_tx: undefined,
-      ts: new Date().toISOString(),
+      provider_onchain_tx: providerSettlementTx,
     };
-    const receipt = await createSignedReceipt(base);
-    return { status: 200 as const, content, receipt };
+
+    if (settlementMode === 'external') {
+      await requests.updateOne(
+        { _id: requestId } as any,
+        { $set: { status: 'awaiting_settlement', bytes_billed: bytesBilled, cost: finalCost } } as any
+      );
+      return { status: 200 as const, content, pendingReceipt: { requestId, payload: receiptPayload } };
+    }
+
+    await requests.updateOne(
+      { _id: requestId } as any,
+      { $set: { status: 'settled', bytes_billed: bytesBilled, cost: finalCost } } as any
+    );
+    const receipt = await createSignedReceipt(receiptPayload);
+    return { status: 200 as const, content, receipt, requestId };
   } catch (err) {
     if (holdId) await releaseHold(holdId);
     throw err;
   }
+}
+
+export async function finalizeExternalReceipt(pending: PendingReceipt, opts?: { x402Tx?: string | null }) {
+  const db = await getDb();
+  const payload = { ...pending.payload, x402_tx: opts?.x402Tx ?? undefined };
+  await db.collection('requests').updateOne(
+    { _id: pending.requestId } as any,
+    { $set: { status: 'settled', x402_tx: opts?.x402Tx ?? null } } as any
+  );
+  return createSignedReceipt(payload);
+}
+
+export async function markRequestSettlementFailed(requestId: string, reason: string) {
+  const db = await getDb();
+  await db.collection('requests').updateOne(
+    { _id: requestId } as any,
+    { $set: { status: 'failed', failure_reason: reason } } as any
+  );
 }

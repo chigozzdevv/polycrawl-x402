@@ -56,17 +56,23 @@ export async function getProviderOverview(userId: string) {
   };
 }
 
-export async function getProviderRequests(userId: string) {
+export async function getProviderRequests(userId: string, options?: { limit?: number; status?: string }) {
   const db = await getDb();
   const provider = await db.collection('providers').findOne({ user_id: userId });
   if (!provider) return null;
   const resources = await db.collection('resources').find({ provider_id: (provider as any)._id }).toArray();
   const resourceIds = resources.map((r: any) => r._id);
+
+  const filter: any = { resource_id: { $in: resourceIds } };
+  if (options?.status) {
+    filter.status = options.status;
+  }
+
   const requests = await db
     .collection('requests')
-    .find({ resource_id: { $in: resourceIds } } as any)
+    .find(filter)
     .sort({ ts: -1 })
-    .limit(100)
+    .limit(options?.limit || 100)
     .toArray();
   return requests;
 }

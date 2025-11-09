@@ -17,6 +17,7 @@ export const createResourceInput = z
   modes: z.array(z.enum(['raw', 'summary'])).default(['raw']),
   storage_ref: z.string().optional(),
   connector_id: z.string().optional(),
+  sample_preview: z.string().optional(),
   allow_agent_ids: z.array(z.string()).optional(),
   deny_paths: z.array(z.string()).optional(),
 })

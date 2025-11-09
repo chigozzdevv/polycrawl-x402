@@ -25,7 +25,10 @@ export async function getOverviewController(req: FastifyRequest, reply: FastifyR
 
 export async function getRequestsController(req: FastifyRequest, reply: FastifyReply) {
   const userId = (req as any).userId as string;
-  const data = await getProviderRequests(userId);
+  const query = req.query as any;
+  const limit = Math.min(Number(query.limit) || 100, 500);
+  const status = query.status as string | undefined;
+  const data = await getProviderRequests(userId, { limit, status });
   if (!data) return reply.code(404).send({ error: 'PROVIDER_NOT_FOUND' });
   return reply.send({ requests: data });
 }

@@ -35,6 +35,7 @@ export async function createResourceForProvider(providerId: string, input: Omit<
     path: input.path,
     tags: input.tags,
     summary: input.summary,
+    sample_preview: (input as any).sample_preview,
     schema: input.schema,
     size_bytes: input.size_bytes,
     price_per_kb: input.price_per_kb,
@@ -56,6 +57,31 @@ export async function listResourcesByProvider(providerId: string, limit = 50) {
   return db
     .collection<ResourceDoc>('resources')
     .find({ provider_id: providerId } as any)
+    .sort({ updated_at: -1 } as any)
+    .limit(limit)
+    .toArray();
+}
+
+export async function listPublicResources(limit = 24) {
+  const db = await getDb();
+  return db
+    .collection<ResourceDoc>('resources')
+    .find({ $or: [{ visibility: { $exists: false } }, { visibility: 'public' }] } as any)
+    .project({
+      _id: 1,
+      provider_id: 1,
+      title: 1,
+      type: 1,
+      format: 1,
+      domain: 1,
+      summary: 1,
+      tags: 1,
+      sample_preview: 1,
+      price_per_kb: 1,
+      price_flat: 1,
+      verified: 1,
+      updated_at: 1,
+    } as any)
     .sort({ updated_at: -1 } as any)
     .limit(limit)
     .toArray();

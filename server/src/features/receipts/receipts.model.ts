@@ -5,6 +5,7 @@ import { loadEnv } from '@/config/env.js';
 type ReceiptDoc = { _id: string; request_id: string; json: any; ed25519_sig: string; ts: string };
 type SigningKey = Awaited<ReturnType<typeof importPKCS8>>;
 
+// Lazily import the Ed25519 signing key once; used to bind a signed receipt to each fulfilled request
 let keyPromise: Promise<SigningKey> | null = null;
 async function getSigningKey() {
   if (!keyPromise) {
@@ -15,6 +16,7 @@ async function getSigningKey() {
   return keyPromise;
 }
 
+// Persists a receipt and returns it with an Ed25519 JWT signature for verification by clients
 export async function createSignedReceipt(payload: any) {
   const db = await getDb();
   const key = await getSigningKey();

@@ -97,7 +97,6 @@ export function SpendingCapsPage() {
 
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-medium text-parchment">Spending caps</h2>
           <p className="text-sm text-fog mt-1">Manage caps to control costs</p>
         </div>
         {!isEditing ? (

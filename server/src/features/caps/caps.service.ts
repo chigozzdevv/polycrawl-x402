@@ -64,10 +64,11 @@ export async function checkSpendingCaps(
 
   const modeCap = mode === 'raw' ? caps.per_mode_caps?.raw : caps.per_mode_caps?.summary;
   if (modeCap && modeCap > 0) {
+    const modeWindowStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const modeSpend = await db
       .collection('requests')
       .aggregate([
-        { $match: { user_id: userId, mode: mode, status: 'settled' } },
+        { $match: { user_id: userId, mode: mode, status: 'settled', ts: { $gte: modeWindowStart.toISOString() } } },
         { $group: { _id: null, total: { $sum: '$cost' } } },
       ])
       .toArray();

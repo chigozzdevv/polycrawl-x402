@@ -14,8 +14,9 @@ import { ResourcesPage } from './provider/resources'
 import { EarningsPage } from './provider/earnings'
 import { AnalyticsPage } from './provider/analytics'
 import { ConnectorsPage } from './provider/connectors'
+import { ProviderSettingsPage } from './provider/settings'
 import { SignupSuccessModal } from '@/components/signup-success-modal'
-import { LogOut, User, Menu, X, Settings, CreditCard, Receipt, LayoutDashboard, Wallet, PlugZap } from 'lucide-react'
+import { LogOut, User, Menu, X, Settings, CreditCard, Receipt, LayoutDashboard, Wallet, PlugZap, TrendingUp, BarChart3, Database, ChevronDown } from 'lucide-react'
 
 const SIGNUP_FLAG = 'signup_bonus_pending'
 const SIGNUP_RECENT_FLAG = 'signup_bonus_recent'
@@ -44,6 +45,9 @@ export function Dashboard() {
   const [providerProvisioning, setProviderProvisioning] = useState(false)
   const [workspaceMessage, setWorkspaceMessage] = useState<string | null>(null)
   const pendingSectionRef = useRef<string | null>(null)
+  const workspaceButtonRef = useRef<HTMLButtonElement | null>(null)
+  const workspaceMenuRef = useRef<HTMLDivElement | null>(null)
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -57,7 +61,15 @@ export function Dashboard() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const saved = (window.localStorage.getItem(WORKSPACE_PREF_KEY) as Workspace | null) ?? 'consumer'
+    let saved: Workspace = 'consumer'
+    try {
+      const rawSaved = window.localStorage.getItem(WORKSPACE_PREF_KEY)
+      if (rawSaved === 'consumer' || rawSaved === 'provider') {
+        saved = rawSaved
+      }
+    } catch (e) {
+      console.warn('Failed to read workspace preference from localStorage:', e)
+    }
     setWorkspace(saved)
     let cancelled = false
 
@@ -107,8 +119,28 @@ export function Dashboard() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    window.localStorage.setItem(WORKSPACE_PREF_KEY, workspace)
+    try {
+      window.localStorage.setItem(WORKSPACE_PREF_KEY, workspace)
+    } catch (e) {
+      console.warn('Failed to save workspace preference to localStorage:', e)
+    }
   }, [workspace])
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        workspaceMenuOpen &&
+        workspaceMenuRef.current &&
+        workspaceButtonRef.current &&
+        !workspaceMenuRef.current.contains(event.target as Node) &&
+        !workspaceButtonRef.current.contains(event.target as Node)
+      ) {
+        setWorkspaceMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [workspaceMenuOpen])
 
   const consumerSections: Section[] = useMemo(
     () => [
@@ -123,11 +155,12 @@ export function Dashboard() {
 
   const providerSections: Section[] = useMemo(
     () => [
-      { id: 'overview-provider', label: 'Overview', description: 'Provider stats', icon: LayoutDashboard, render: () => <OverviewPage /> },
-      { id: 'resources', label: 'Resources', description: 'Listings & verification', icon: Wallet, render: () => <ResourcesPage /> },
-      { id: 'earnings', label: 'Earnings', description: 'Revenue analytics', icon: CreditCard, render: () => <EarningsPage /> },
-      { id: 'analytics', label: 'Analytics', description: 'Search trends', icon: Receipt, render: () => <AnalyticsPage /> },
-      { id: 'connectors', label: 'Connectors', description: 'Secrets & auth', icon: PlugZap, render: () => <ConnectorsPage /> },
+      { id: 'overview-provider', label: 'Overview', description: 'Provider dashboard', icon: LayoutDashboard, render: () => <OverviewPage /> },
+      { id: 'resources', label: 'Resources', description: 'Manage listings', icon: Database, render: () => <ResourcesPage /> },
+      { id: 'connectors', label: 'Connectors', description: 'Auth & secrets', icon: PlugZap, render: () => <ConnectorsPage /> },
+      { id: 'earnings', label: 'Earnings', description: 'Revenue tracking', icon: TrendingUp, render: () => <EarningsPage /> },
+      { id: 'analytics', label: 'Analytics', description: 'Performance metrics', icon: BarChart3, render: () => <AnalyticsPage /> },
+      { id: 'settings', label: 'Settings', description: 'Account & access', icon: Settings, render: () => <ProviderSettingsPage /> },
     ],
     []
   )
@@ -227,24 +260,50 @@ export function Dashboard() {
             </button>
             <Logo className="h-5" />
           </div>
-          <div className="flex flex-1 flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <p className="text-sm text-fog">Viewing as:</p>
-              <select
-                value={workspace}
-                onChange={(e) => handleWorkspaceChange(e.target.value as Workspace)}
-                disabled={providerChecking || providerProvisioning}
-                className="bg-transparent text-sm font-medium text-parchment cursor-pointer focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+          <div className="flex flex-1 flex-col gap-1">
+            <div className="relative flex flex-wrap items-center gap-3">
+              <p className="text-xs uppercase tracking-[0.35em] text-fog">Viewing as</p>
+              <button
+                ref={workspaceButtonRef}
+                onClick={() => {
+                  if (providerProvisioning || providerChecking) return
+                  setWorkspaceMenuOpen((prev) => !prev)
+                }}
+                className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1 text-sm font-medium text-parchment transition hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={providerProvisioning || providerChecking}
               >
-                {workspaceOptions.map((option) => {
-                  const isDisabled = option.id === 'provider' && !providerReady && !providerChecking && !providerProvisioning
-                  return (
-                    <option key={option.id} value={option.id} disabled={isDisabled} className="bg-ink text-parchment">
-                      {option.label}
-                    </option>
-                  )
-                })}
-              </select>
+                {workspace === 'consumer' ? 'Consumer' : 'Provider'}
+                <ChevronDown className="h-4 w-4" />
+              </button>
+              {workspaceMenuOpen && (
+                <div
+                  ref={workspaceMenuRef}
+                  className="absolute left-0 top-full mt-2 w-48 rounded-2xl border border-white/10 bg-[#121212]/95 p-1 shadow-2xl backdrop-blur"
+                >
+                  {workspaceOptions.map((option) => {
+                    const isSelected = workspace === option.id
+                    const isDisabled =
+                      option.id === 'provider' &&
+                      (!providerReady && !providerProvisioning && !providerChecking)
+                    return (
+                      <button
+                        key={option.id}
+                        onClick={() => {
+                          setWorkspaceMenuOpen(false)
+                          handleWorkspaceChange(option.id)
+                        }}
+                        disabled={isDisabled}
+                        className={`w-full rounded-xl px-3 py-2 text-left text-sm ${
+                          isSelected ? 'bg-sand text-ink' : 'text-parchment hover:bg-white/10'
+                        } ${isDisabled ? 'cursor-not-allowed opacity-60' : ''}`}
+                      >
+                        {option.label}
+                        {isDisabled && <span className="ml-2 text-xs text-fog">Setup required</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
             {workspaceMessage && <p className="text-xs text-amber-200">{workspaceMessage}</p>}
           </div>

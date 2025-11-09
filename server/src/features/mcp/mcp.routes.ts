@@ -6,6 +6,7 @@ import { discoverInput, discoverResult, fetchInput, fetchResult } from '@/featur
 import { discoverController, fetchController } from '@/features/mcp/mcp.controller.js';
 import { createMcpRuntime } from '@/features/mcp/mcp.sdk.js';
 import { runWithRequestContext, setSessionContext } from '@/services/oauth/session-store.js';
+import { requireX402ForMcpFetch } from '@/middleware/x402.js';
 
 export async function registerMcpRoutes(app: FastifyInstance) {
   const runtime = await createMcpRuntime();
@@ -54,7 +55,7 @@ export async function registerMcpRoutes(app: FastifyInstance) {
   });
 
   r.post('/tools/fetch_content', {
-    preHandler: [requireOAuth, requireTap],
+    preHandler: [requireOAuth, requireTap, requireX402ForMcpFetch],
     schema: { body: fetchInput, response: { 200: fetchResult } },
     handler: fetchController,
   });

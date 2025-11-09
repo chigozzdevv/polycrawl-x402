@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import { signTapRequest, type TapSignOptions } from './tap-signer.js';
 import fs from 'node:fs/promises';
 import { generateKeyId } from './keygen.js';
+import { createPublicKey } from 'node:crypto';
 
 type ProxyConfig = {
   privateKeyPath: string;
@@ -19,7 +20,19 @@ export async function buildProxyServer(config: ProxyConfig) {
   await app.register(cors, { origin: true, credentials: true });
 
   const privateKey = await fs.readFile(config.privateKeyPath, 'utf-8');
-  const keyId = config.keyId || generateKeyId(privateKey);
+  // Derive public key PEM from the private key to compute a stable keyId
+  let derivedPublicKeyPem: string | undefined;
+  try {
+    const pub = createPublicKey(privateKey).export({ type: 'spki', format: 'pem' }) as string;
+    derivedPublicKeyPem = pub;
+  } catch {
+    if (!config.keyId) {
+      throw new Error(
+        'Failed to derive public key from TAP private key. Provide TAP_KEY_ID or use a PKCS#8 Ed25519 private key.'
+      );
+    }
+  }
+  const keyId = config.keyId || generateKeyId(derivedPublicKeyPem!);
 
   app.all('/proxy/*', async (request, reply) => {
     const proxyPath = (request.params as any)['*'];
@@ -50,7 +63,7 @@ export async function buildProxyServer(config: ProxyConfig) {
         privateKey,
         keyId,
         tag,
-        algorithm: 'Ed25519',
+        algorithm: 'ed25519',
         expiresIn: 480,
       }
     );

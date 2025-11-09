@@ -6,16 +6,19 @@
   "scripts": {
     "dev": "tsx -r tsconfig-paths/register src/server.ts",
     "start": "node --enable-source-maps dist/server.js",
-    "build": "tsc -p tsconfig.json",
-    "setup:indexes": "tsx scripts/setup-indexes.js",
+    "build": "tsc -p tsconfig.json && tsc-alias -p tsconfig.json",
     "tap:keygen": "tsx src/tap-proxy/keygen.ts",
-    "tap:proxy": "tsx src/tap-proxy/index.ts"
+    "tap:proxy": "tsx src/tap-proxy/index.ts",
+    "sol:fund-agent": "node dist/scripts/fund-agent.js",
+    "sol:airdrop": "node dist/scripts/airdrop.js",
+    "sol:balance": "node dist/scripts/sol-balance.js"
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",
     "@fastify/formbody": "^8.0.2",
     "@fastify/helmet": "^13.0.2",
     "@modelcontextprotocol/sdk": "^1.21.0",
+    "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
     "argon2": "^0.44.0",
     "cloudinary": "^2.8.0",
@@ -27,11 +30,13 @@
     "mongodb": "^6.20.0",
     "tsconfig-paths": "^4.2.0",
     "tsx": "^4.20.6",
+    "tweetnacl": "^1.0.3",
     "typescript": "^5.9.3",
     "uuid": "^13.0.0",
     "zod": "^4.1.12"
   },
   "devDependencies": {
-    "@types/node": "^24.10.0"
+    "@types/node": "^24.10.0",
+    "tsc-alias": "^1.8.8"
   }
 }
