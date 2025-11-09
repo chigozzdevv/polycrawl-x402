@@ -5,13 +5,51 @@ import { Button } from '@/components/ui/button';
 import { api } from '@/services/api';
 import type { Wallet } from '@/services/api';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { Wallet as WalletIcon, TrendingDown, Plus, ArrowUpRight } from 'lucide-react';
+import { Wallet as WalletIcon, TrendingDown, Plus, ArrowUpRight, X, Loader2, Copy, Check } from 'lucide-react';
+
+function Modal({
+  open,
+  title,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#0d0d0d] p-6 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-parchment">{title}</h3>
+          <button onClick={onClose} className="text-fog hover:text-parchment">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export function WalletPage() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [showSignupBanner, setShowSignupBanner] = useState(false);
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [depositAmount, setDepositAmount] = useState('');
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawAddress, setWithdrawAddress] = useState('');
+  const [depositStatus, setDepositStatus] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+  const [withdrawStatus, setWithdrawStatus] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+  const [depositSubmitting, setDepositSubmitting] = useState(false);
+  const [withdrawSubmitting, setWithdrawSubmitting] = useState(false);
+  const [depositTab, setDepositTab] = useState<'onchain' | 'request'>('onchain');
+  const [copyToast, setCopyToast] = useState<string | null>(null);
 
   useEffect(() => {
     loadWallets();
@@ -32,6 +70,63 @@ export function WalletPage() {
       setError(err.message || 'Failed to load wallets');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDeposit = async () => {
+    setDepositStatus(null);
+    const amount = Number(depositAmount);
+    if (!amount || amount <= 0) {
+      setDepositStatus({ tone: 'error', message: 'Enter a valid amount greater than 0.' });
+      return;
+    }
+    setDepositSubmitting(true);
+    try {
+      const res = await api.createDeposit('payer', amount);
+      setDepositStatus({ tone: 'success', message: `Request ${res.id} submitted. We’ll mint devnet USDC shortly.` });
+      setDepositAmount('');
+      await loadWallets();
+    } catch (err: any) {
+      setDepositStatus({ tone: 'error', message: err.message || 'Unable to create deposit' });
+    } finally {
+      setDepositSubmitting(false);
+    }
+  };
+
+  const handleCopy = async (value?: string) => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopyToast('copied');
+      setTimeout(() => setCopyToast(null), 2000);
+    } catch (err) {
+      setCopyToast('Unable to copy');
+      setTimeout(() => setCopyToast(null), 2000);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    setWithdrawStatus(null);
+    const amount = Number(withdrawAmount);
+    if (!amount || amount <= 0) {
+      setWithdrawStatus({ tone: 'error', message: 'Enter a valid amount greater than 0.' });
+      return;
+    }
+    if (!withdrawAddress || withdrawAddress.length < 10) {
+      setWithdrawStatus({ tone: 'error', message: 'Destination address is required.' });
+      return;
+    }
+    setWithdrawSubmitting(true);
+    try {
+      const res = await api.createWithdrawal('payout', amount, withdrawAddress.trim());
+      setWithdrawStatus({ tone: 'success', message: `Withdrawal ${res.id} sent. Check ${withdrawAddress.trim()} after a few seconds.` });
+      setWithdrawAmount('');
+      setWithdrawAddress('');
+      await loadWallets();
+    } catch (err: any) {
+      setWithdrawStatus({ tone: 'error', message: err.message || 'Unable to create withdrawal' });
+    } finally {
+      setWithdrawSubmitting(false);
     }
   };
 
@@ -58,9 +153,11 @@ export function WalletPage() {
     { name: 'Blocked', value: payerWallet?.blocked || 0 },
   ];
 
-  const COLORS = ['#D8C8A8', '#E07555'];
+const COLORS = ['#D8C8A8', '#E07555'];
+const MAX_REQUEST_AMOUNT = 5000;
 
   return (
+    <>
     <div className="space-y-6">
       {showSignupBanner && (
         <div className="rounded-2xl border border-sand/30 bg-sand/10 px-4 py-3 text-sm text-black md:text-parchment">
@@ -111,7 +208,7 @@ export function WalletPage() {
                 </div>
               </div>
               <div className="flex gap-2 mt-4">
-                <Button variant="primary" className="flex-1 gap-2">
+                <Button variant="primary" className="flex-1 gap-2" onClick={() => setDepositOpen(true)}>
                   <Plus className="w-4 h-4" />
                   Add Funds
                 </Button>
@@ -159,7 +256,7 @@ export function WalletPage() {
                 </div>
               </div>
               <div className="flex gap-2 mt-4">
-                <Button variant="outline" className="flex-1 gap-2">
+                <Button variant="outline" className="flex-1 gap-2" onClick={() => setWithdrawOpen(true)}>
                   <ArrowUpRight className="w-4 h-4" />
                   Withdraw
                 </Button>
@@ -217,5 +314,126 @@ export function WalletPage() {
         </Card>
       </motion.div>
     </div>
+
+      <Modal open={depositOpen} title="Add funds" onClose={() => { setDepositOpen(false); setDepositStatus(null); }}>
+        <div className="space-y-4">
+          <div className="flex rounded-full border border-white/15 bg-transparent p-1 text-xs font-semibold uppercase tracking-[0.2em] text-fog">
+            {(['onchain', 'request'] as const).map((tab) => {
+              const isActive = depositTab === tab
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setDepositTab(tab)}
+                  className={`flex-1 rounded-full px-3 py-1 transition ${
+                    isActive ? 'bg-sand text-ink' : 'bg-white/5 text-fog hover:text-parchment'
+                  }`}
+                >
+                  {tab === 'onchain' ? 'On-chain' : 'Request'}
+                </button>
+              )
+            })}
+          </div>
+
+          {depositTab === 'onchain' ? (
+            <div className="space-y-4 text-sm text-fog">
+              <p>Send devnet USDC directly to your payer wallet. Balances update once Solana confirms (~1 min).</p>
+              <div className="rounded-2xl border border-white/15 bg-[#121212] p-4">
+                <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.3em] text-fog/70">
+                  <span>Payer address</span>
+                  <button
+                    onClick={() => handleCopy(payerWallet?.address)}
+                    className="flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-parchment transition hover:bg-white/10"
+                  >
+                    {copyToast === 'copied' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    {copyToast === 'copied' ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+                <p className="break-all font-mono text-base text-parchment">{payerWallet?.address || 'Address unavailable'}</p>
+              </div>
+              <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 p-4 text-xs text-fog">
+                Use <code className="text-parchment">solana airdrop</code> for SOL fees, then move devnet USDC with <code className="text-parchment">spl-token transfer</code>.
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-fog">
+                Request Polycrawl to mint devnet USDC for you (max ${MAX_REQUEST_AMOUNT.toLocaleString()} per request, ${MAX_REQUEST_AMOUNT.toLocaleString()} total per day).
+                Funds are credited immediately after approval.
+              </p>
+              <label className="space-y-1 text-sm text-fog">
+                <span>Amount (USD)</span>
+                <input
+                  type="number"
+                  min="1"
+                  max={MAX_REQUEST_AMOUNT}
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
+                  className="w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-parchment focus:border-sand/50 focus:outline-none"
+                />
+              </label>
+              <div className="pt-2">
+                <Button onClick={handleDeposit} disabled={depositSubmitting} className="w-full">
+                  {depositSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit mint request'}
+                </Button>
+              </div>
+            </>
+          )}
+          {depositStatus && (
+            <div
+              className={`rounded-xl border px-4 py-3 text-sm ${
+                depositStatus.tone === 'success' ? 'border-sand/40 bg-sand/10 text-sand' : 'border-ember/40 bg-ember/10 text-ember'
+              }`}
+            >
+              {depositStatus.message}
+            </div>
+          )}
+          {copyToast && (
+            <p className="text-xs text-sand">
+              {copyToast === 'copied' ? 'Address copied to clipboard' : copyToast}
+            </p>
+          )}
+        </div>
+      </Modal>
+
+      <Modal open={withdrawOpen} title="Withdraw funds" onClose={() => { setWithdrawOpen(false); setWithdrawStatus(null); }}>
+        <div className="space-y-4">
+          <p className="text-sm text-fog">
+            Send payout wallet funds to a Solana address (devnet). You can request up to ${MAX_REQUEST_AMOUNT.toLocaleString()} per withdrawal.
+          </p>
+          <label className="space-y-1 text-sm text-fog">
+            <span>Amount (USD)</span>
+            <input
+              type="number"
+              min="1"
+              max={MAX_REQUEST_AMOUNT}
+              value={withdrawAmount}
+              onChange={(e) => setWithdrawAmount(e.target.value)}
+              className="w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-parchment focus:border-sand/50 focus:outline-none"
+            />
+          </label>
+          <label className="space-y-1 text-sm text-fog">
+            <span>Destination address</span>
+            <input
+              value={withdrawAddress}
+              onChange={(e) => setWithdrawAddress(e.target.value)}
+              className="w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-parchment focus:border-sand/50 focus:outline-none"
+              placeholder="Enter Solana address"
+            />
+          </label>
+          <Button onClick={handleWithdraw} disabled={withdrawSubmitting} className="mt-3 w-full">
+            {withdrawSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit withdrawal'}
+          </Button>
+          {withdrawStatus && (
+            <div
+              className={`mt-3 rounded-xl border px-4 py-3 text-sm ${
+                withdrawStatus.tone === 'success' ? 'border-sand/40 bg-sand/10 text-sand' : 'border-ember/40 bg-ember/10 text-ember'
+              }`}
+            >
+              {withdrawStatus.message}
+            </div>
+          )}
+        </div>
+      </Modal>
+    </>
   );
 }
