@@ -1,4 +1,14 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+const getDefaultApiBase = () => {
+  if (import.meta.env.DEV) {
+    return `${window.location.protocol}//${window.location.hostname}:3000`;
+  }
+  if (typeof window !== 'undefined') {
+    return window.location.origin.replace(/\/$/, '');
+  }
+  return 'http://localhost:3000';
+};
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || getDefaultApiBase()).replace(/\/$/, '');
 
 export interface AuthResponse {
   token: string;
@@ -54,6 +64,7 @@ export interface Wallet {
   available: number;
   blocked: number;
   status: 'active' | 'frozen';
+  address?: string;
 }
 
 export interface Provider {
@@ -246,6 +257,18 @@ export interface SiteVerificationCheckResponse {
   error?: string;
 }
 
+export interface Domain {
+  _id: string;
+  provider_id: string;
+  domain: string;
+  method: 'dns' | 'file';
+  token: string;
+  status: 'pending' | 'verified' | 'failed';
+  created_at: string;
+  verified_at?: string;
+  last_checked_at?: string;
+}
+
 class ApiService {
   private token: string | null = null;
 
@@ -280,17 +303,39 @@ class ApiService {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers,
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Request failed' }));
-      throw new Error(error.message || `HTTP ${response.status}`);
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers,
+      });
+    } catch (err: any) {
+      throw new Error(err?.message || 'Unable to reach API server');
     }
 
-    return response.json();
+    if (!response.ok) {
+      let errorMessage = `HTTP ${response.status}`;
+      try {
+        const errorBody = await response.json();
+        errorMessage = errorBody.message || errorMessage;
+      } catch {
+        const text = await response.text().catch(() => '');
+        if (text) errorMessage = text;
+      }
+      throw new Error(errorMessage);
+    }
+
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const text = await response.text();
+      return text ? (JSON.parse(text) as T) : (undefined as T);
+    }
+
+    return (await response.text()) as T;
   }
 
   async signup(data: SignupRequest): Promise<AuthResponse> {
@@ -365,6 +410,20 @@ class ApiService {
       body: JSON.stringify({}),
     });
     return res.provider;
+  }
+
+  async createDeposit(role: 'payer' | 'payout', amount: number): Promise<{ id: string; instructions?: any }> {
+    return this.request<{ id: string; instructions?: any }>('/wallets/deposits', {
+      method: 'POST',
+      body: JSON.stringify({ role, amount }),
+    });
+  }
+
+  async createWithdrawal(role: 'payer' | 'payout', amount: number, to: string): Promise<{ id: string; tx_hash?: string }> {
+    return this.request<{ id: string; tx_hash?: string }>('/wallets/withdrawals', {
+      method: 'POST',
+      body: JSON.stringify({ role, amount, to }),
+    });
   }
 
   async getProviderOverview(): Promise<ProviderOverview> {
@@ -495,6 +554,49 @@ class ApiService {
   async getDeposits(limit = 50): Promise<Deposit[]> {
     const res = await this.request<{ deposits: Deposit[] }>(`/wallets/deposits?limit=${limit}`);
     return res.deposits;
+  }
+
+  async getCloudinarySignature(publicId: string): Promise<{ timestamp: number; signature: string; cloud_name: string; api_key: string }> {
+    return this.request('/datasets/upload-signature', {
+      method: 'POST',
+      body: JSON.stringify({ public_id: publicId }),
+    });
+  }
+
+  async uploadFileToCloudinary(file: File): Promise<string> {
+    const publicId = `polycrawl/${Date.now()}_${file.name}`;
+    const sig = await this.getCloudinarySignature(publicId);
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('public_id', publicId);
+    formData.append('timestamp', sig.timestamp.toString());
+    formData.append('signature', sig.signature);
+    formData.append('api_key', sig.api_key);
+    formData.append('resource_type', 'raw');
+
+    const response = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloud_name}/raw/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error('File upload failed');
+    }
+
+    const data = await response.json();
+    return data.secure_url;
+  }
+
+  async getDomains(): Promise<Domain[]> {
+    const res = await this.request<{ domains: Domain[] }>('/domains');
+    return res.domains;
+  }
+
+  async deleteDomain(domain: string): Promise<{ ok: boolean }> {
+    return this.request(`/domains/${encodeURIComponent(domain)}`, {
+      method: 'DELETE',
+    });
   }
 }
 

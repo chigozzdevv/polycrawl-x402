@@ -1,7 +1,7 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { cloudinarySignatureInput, siteVerifyInput, siteVerifyCheckInput } from '@/features/providers/providers.schema.js';
-import { getOrCreateProvider, generateCloudinaryUploadSignature, getProviderByUserId, getProviderOverview, getProviderRequests, getProviderEarnings, verifySiteInit, verifySiteCheck } from '@/features/providers/providers.service.js';
+import { getOrCreateProvider, generateCloudinaryUploadSignature, getProviderByUserId, getProviderOverview, getProviderRequests, getProviderEarnings, verifySiteInit, verifySiteCheck, getProviderDomains, removeProviderDomain } from '@/features/providers/providers.service.js';
 
 export async function createOrGetProviderController(req: FastifyRequest, reply: FastifyReply) {
   const userId = (req as any).userId as string;
@@ -61,4 +61,18 @@ export async function siteVerifyCheckController(req: FastifyRequest, reply: Fast
   const { domain, method, token } = siteVerifyCheckInput.parse(req.body);
   const out = await verifySiteCheck(userId, domain, method, token);
   return reply.send(out);
+}
+
+export async function getDomainsController(req: FastifyRequest, reply: FastifyReply) {
+  const userId = (req as any).userId as string;
+  const domains = await getProviderDomains(userId);
+  if (!domains) return reply.code(404).send({ error: 'PROVIDER_NOT_FOUND' });
+  return reply.send({ domains });
+}
+
+export async function deleteDomainController(req: FastifyRequest, reply: FastifyReply) {
+  const userId = (req as any).userId as string;
+  const { domain } = req.params as { domain: string };
+  const result = await removeProviderDomain(userId, domain);
+  return reply.send(result);
 }

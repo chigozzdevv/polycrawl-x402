@@ -59,7 +59,11 @@ export function SpendingCapsPage() {
       setIsEditing(false);
       loadData();
     } catch (err: any) {
-      setError(err.message || 'Failed to update spending caps');
+      if (err?.message === 'DAILY_LIMIT_REACHED') {
+        setError('You have reached today’s mint limit. Try again tomorrow.');
+      } else {
+        setError(err.message || 'Failed to update spending caps');
+      }
     }
   };
 

@@ -12,16 +12,30 @@ const depositInput = z.object({ role: z.enum(['payer', 'payout']).default('payer
 export async function createDepositController(req: FastifyRequest, reply: FastifyReply) {
   const userId = (req as any).userId as string;
   const { role, amount } = depositInput.parse(req.body);
-  const out = await createDepositService(userId, role, amount);
-  return reply.send(out);
+  try {
+    const out = await createDepositService(userId, role, amount);
+    return reply.send(out);
+  } catch (err: any) {
+    if (err?.message === 'AMOUNT_EXCEEDS_LIMIT' || err?.message === 'DAILY_LIMIT_REACHED') {
+      return reply.code(400).send({ error: err.message });
+    }
+    throw err;
+  }
 }
 
 const withdrawalInput = z.object({ role: z.enum(['payer', 'payout']).default('payout'), amount: z.number().positive(), to: z.string().min(10) });
 export async function createWithdrawalController(req: FastifyRequest, reply: FastifyReply) {
   const userId = (req as any).userId as string;
   const { role, amount, to } = withdrawalInput.parse(req.body);
-  const out = await createWithdrawalService(userId, role, amount, to);
-  return reply.send(out);
+  try {
+    const out = await createWithdrawalService(userId, role, amount, to);
+    return reply.send(out);
+  } catch (err: any) {
+    if (err?.message === 'AMOUNT_EXCEEDS_LIMIT') {
+      return reply.code(400).send({ error: err.message });
+    }
+    throw err;
+  }
 }
 
 export async function listWithdrawalsController(req: FastifyRequest, reply: FastifyReply) {

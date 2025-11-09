@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import { Logo } from '@/components/logo'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/auth-context'
@@ -25,7 +26,14 @@ export function AuthPage() {
   const [walletOptions, setWalletOptions] = useState<WalletDescriptor[]>([])
   const [showOtherWallets, setShowOtherWallets] = useState(false)
 
-  const { login, signup, walletLogin } = useAuth()
+  const { login, signup, walletLogin, isAuthenticated } = useAuth()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (isAuthenticated && !showSuccessModal) {
+      navigate('/app')
+    }
+  }, [isAuthenticated, navigate, showSuccessModal])
 
   useEffect(() => {
     const detected = walletService.getAvailableWallets()
@@ -54,7 +62,9 @@ export function AuthPage() {
         await login(email, password)
       }
     } catch (err: any) {
-      setError(err.message || 'Authentication failed')
+      const errorMsg = err.message || 'Authentication failed'
+      setError(errorMsg)
+      setTimeout(() => setError(''), 5000)
     } finally {
       setIsLoading(false)
     }
@@ -72,7 +82,9 @@ export function AuthPage() {
         handleSignupBonusFlag()
       }
     } catch (err: any) {
-      setError(err.message || 'Wallet authentication failed')
+      const errorMsg = err.message || 'Wallet authentication failed'
+      setError(errorMsg)
+      setTimeout(() => setError(''), 5000)
     } finally {
       setIsLoading(false)
     }
@@ -90,7 +102,11 @@ export function AuthPage() {
           <div className="mb-8 flex items-center justify-between">
             <button
               onClick={() => {
-                window.location.hash = '#home'
+                if (window.location.pathname === '/auth') {
+                  navigate('/')
+                } else {
+                  window.location.hash = '#home'
+                }
               }}
               className="flex items-center gap-2 text-sm text-fog transition-colors hover:text-parchment"
             >
@@ -210,9 +226,9 @@ export function AuthPage() {
 
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   onClick={() => setIsWalletMode(true)}
-                  className="flex w-full items-center justify-center gap-2 border-white/20 text-parchment hover:text-black"
+                  className="flex w-full items-center justify-center gap-2 border border-white/12 text-parchment transition-none hover:border-white/12 hover:bg-transparent"
                 >
                   <WalletIcon className="h-4 w-4" />
                   Continue with Wallet

@@ -1,56 +1,94 @@
-import { useState, useEffect } from 'react';
-import { LandingPage } from '@/pages/landing';
-import { AuthPage } from '@/pages/auth';
-import { Dashboard } from '@/pages/dashboard';
-import { AuthProvider, useAuth } from '@/context/auth-context';
+import { useEffect, useState } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { LandingPage } from '@/pages/landing'
+import { AuthPage } from '@/pages/auth'
+import { Dashboard } from '@/pages/dashboard'
+import { AuthProvider, useAuth } from '@/context/auth-context'
 
-function AppRoutes() {
-  const { isAuthenticated, isLoading } = useAuth();
-  const [showAuth, setShowAuth] = useState(false);
+const WORKSPACE_PREF_KEY = 'polycrawl_workspace_preference'
+const SECTION_PREF_PREFIX = 'polycrawl_section_'
 
-  useEffect(() => {
-    if (isAuthenticated) return;
-
-    const handleHashChange = () => {
-      if (window.location.hash === '#auth') {
-        setShowAuth(true);
-      } else if (window.location.hash === '#home') {
-        setShowAuth(false);
-      }
-    };
-
-    window.addEventListener('hashchange', handleHashChange);
-    handleHashChange();
-
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [isAuthenticated]);
+function ProtectedRoute() {
+  const { isAuthenticated, isLoading } = useAuth()
+  const location = useLocation()
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-ink flex items-center justify-center">
-        <div className="text-parchment">Loading...</div>
+      <div className="flex min-h-screen items-center justify-center bg-ink text-parchment">
+        Loading…
       </div>
-    );
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/auth" state={{ from: location }} replace />
+  }
+
+  if (/^\/app\/?$/.test(location.pathname)) {
+    let workspace: 'consumer' | 'provider' = 'consumer'
+    let section = 'overview'
+    try {
+      const savedWorkspace = window.localStorage.getItem(WORKSPACE_PREF_KEY)
+      if (savedWorkspace === 'provider') workspace = 'provider'
+      const savedSection = window.localStorage.getItem(`${SECTION_PREF_PREFIX}${workspace}`)
+      if (savedSection) section = savedSection
+    } catch {
+      // ignore
+    }
+    return <Navigate to={`/app/${workspace}/${section}`} replace />
+  }
+
+  return <Dashboard />
+}
+
+function AuthScreen() {
+  const { isAuthenticated, isLoading } = useAuth()
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-ink text-parchment">
+        Loading…
+      </div>
+    )
   }
 
   if (isAuthenticated) {
-    if (window.location.hash === '#auth') {
-      window.location.hash = '';
+    return <Navigate to="/app" replace />
+  }
+
+  return <AuthPage />
+}
+
+function AppRoutes() {
+  const { isAuthenticated } = useAuth()
+  const [hashAuth, setHashAuth] = useState(false)
+
+  useEffect(() => {
+    if (isAuthenticated) return
+    const handleHashChange = () => {
+      setHashAuth(window.location.hash === '#auth')
     }
-    return <Dashboard />;
-  }
+    window.addEventListener('hashchange', handleHashChange)
+    handleHashChange()
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [isAuthenticated])
 
-  if (showAuth) {
-    return <AuthPage />;
-  }
-
-  return <LandingPage />;
+  return (
+    <Routes>
+      <Route path="/" element={hashAuth ? <AuthPage /> : <LandingPage />} />
+      <Route path="/auth" element={<AuthScreen />} />
+      <Route path="/app/*" element={<ProtectedRoute />} />
+      <Route path="*" element={<Navigate to={isAuthenticated ? '/app' : '/'} replace />} />
+    </Routes>
+  )
 }
 
 export default function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
     </AuthProvider>
-  );
+  )
 }

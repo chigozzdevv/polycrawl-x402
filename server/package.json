@@ -36,6 +36,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@types/bs58": "^4.0.4",
     "@types/node": "^24.10.0",
     "tsc-alias": "^1.8.8"
   }

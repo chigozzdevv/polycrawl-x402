@@ -12,6 +12,8 @@ import {
   cloudinarySignatureController,
   siteVerifyInitController,
   siteVerifyCheckController,
+  getDomainsController,
+  deleteDomainController,
 } from '@/features/providers/providers.controller.js';
 
 export async function registerProvidersRoutes(app: FastifyInstance) {
@@ -32,4 +34,8 @@ export async function registerProvidersRoutes(app: FastifyInstance) {
   r.post('/sites/verify', { preHandler: [requireUser], schema: { body: siteVerifyInput } }, siteVerifyInitController);
 
   r.post('/sites/verify-check', { preHandler: [requireUser], schema: { body: siteVerifyCheckInput } }, siteVerifyCheckController);
+
+  r.get('/domains', { preHandler: [requireUser] }, getDomainsController);
+
+  r.delete('/domains/:domain', { preHandler: [requireUser] }, deleteDomainController);
 }

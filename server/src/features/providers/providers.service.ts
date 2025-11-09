@@ -6,7 +6,7 @@ import { createResourceForProvider } from '@/features/resources/resources.servic
 import dns from 'node:dns/promises';
 import { getProviderEarningsStats } from '@/features/analytics/analytics.service.js';
 import { getProviderSearchStats } from '@/features/analytics/analytics.model.js';
-import { getSiteVerification, upsertSiteVerification, markSiteVerified } from '@/features/providers/sites.model.js';
+import { getSiteVerification, upsertSiteVerification, markSiteVerified, getAllProviderDomains, deleteDomain } from '@/features/providers/sites.model.js';
 
 export async function getOrCreateProvider(userId: string) {
   const db = await getDb();
@@ -118,7 +118,7 @@ export async function verifySiteCheck(userId: string, domain: string, method: 'd
         await markSiteVerified(providerId, domain);
         return { verified: true } as const;
       }
-      return { verified: false };
+      return { verified: false, error: 'FILE_CONTENT_MISMATCH' };
     } catch {
       return { verified: false, error: 'FILE_NOT_FOUND' } as const;
     }
@@ -132,10 +132,27 @@ export async function verifySiteCheck(userId: string, domain: string, method: 'd
         await markSiteVerified(providerId, domain);
         return { verified: true } as const;
       }
-      return { verified: false } as const;
+      return { verified: false, error: 'DNS_RECORD_NOT_FOUND' } as const;
     } catch {
       return { verified: false, error: 'DNS_LOOKUP_FAILED' } as const;
     }
   }
   return { verified: false, error: 'UNSUPPORTED_METHOD' } as const;
+}
+
+export async function getProviderDomains(userId: string) {
+  const db = await getDb();
+  const provider = await db.collection('providers').findOne({ user_id: userId });
+  if (!provider) return null;
+  const providerId = String((provider as any)._id);
+  return getAllProviderDomains(providerId);
+}
+
+export async function removeProviderDomain(userId: string, domain: string) {
+  const db = await getDb();
+  const provider = await db.collection('providers').findOne({ user_id: userId });
+  if (!provider) return { ok: false };
+  const providerId = String((provider as any)._id);
+  await deleteDomain(providerId, domain);
+  return { ok: true };
 }

@@ -4,8 +4,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { api } from '@/services/api';
-import type { Resource, Connector, SiteVerificationInitResponse } from '@/services/api';
-import { Plus, FileText, CheckCircle, Edit, Trash2, Shield, Loader2, Globe, Link2 } from 'lucide-react';
+import type { Resource, Connector, Domain } from '@/services/api';
+import { Plus, FileText, CheckCircle, Edit, Trash2, Loader2, Upload, RefreshCw } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 type ResourceFormState = {
   title: string;
@@ -21,6 +22,7 @@ type ResourceFormState = {
   visibility: 'public' | 'restricted';
   modes: { raw: boolean; summary: boolean };
   connectorId: string;
+  file?: File;
 };
 
 const defaultResourceForm: ResourceFormState = {
@@ -43,20 +45,25 @@ function formatCurrency(amount: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 }
 
+const FORMAT_OPTIONS = {
+  site: ['html', 'json', 'xml', 'rss', 'text', 'markdown'],
+  dataset: ['json', 'csv', 'parquet', 'jsonl', 'xml', 'text'],
+  file: ['pdf', 'docx', 'txt', 'md', 'json', 'csv', 'xlsx', 'png', 'jpg', 'svg']
+};
+
 export function ResourcesPage() {
+  const navigate = useNavigate();
   const [resources, setResources] = useState<Resource[]>([]);
   const [connectors, setConnectors] = useState<Connector[]>([]);
+  const [domains, setDomains] = useState<Domain[]>([]);
   const [expandedResourceId, setExpandedResourceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [resourceModalOpen, setResourceModalOpen] = useState(false);
   const [resourceForm, setResourceForm] = useState<ResourceFormState>(defaultResourceForm);
-  const [verifyDomain, setVerifyDomain] = useState('');
-  const [verifyMethod, setVerifyMethod] = useState<'dns' | 'file'>('dns');
-  const [verifyInit, setVerifyInit] = useState<SiteVerificationInitResponse | null>(null);
-  const [verificationStatus, setVerificationStatus] = useState<string>('');
-  const [verificationLoading, setVerificationLoading] = useState(false);
   const [formSubmitting, setFormSubmitting] = useState(false);
+  const [generatingPreview, setGeneratingPreview] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
 
   useEffect(() => {
     loadPage();
@@ -65,9 +72,14 @@ export function ResourcesPage() {
   const loadPage = async () => {
     setIsLoading(true);
     try {
-      const [resList, connectorList] = await Promise.all([api.getProviderResources(100), api.getConnectors()]);
+      const [resList, connectorList, domainList] = await Promise.all([
+        api.getProviderResources(100),
+        api.getConnectors(),
+        api.getDomains()
+      ]);
       setResources(resList);
       setConnectors(connectorList);
+      setDomains(domainList);
       setError('');
     } catch (err: any) {
       setError(err.message || 'Failed to load resources');
@@ -79,7 +91,20 @@ export function ResourcesPage() {
   const handleResourceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormSubmitting(true);
+    setError('');
     try {
+      let storageRef: string | undefined;
+
+      // Upload file to Cloudinary if file type and file is selected
+      if (resourceForm.type === 'file' && resourceForm.file) {
+        setUploadingFile(true);
+        try {
+          storageRef = await api.uploadFileToCloudinary(resourceForm.file);
+        } finally {
+          setUploadingFile(false);
+        }
+      }
+
       const payload: Partial<Resource> = {
         title: resourceForm.title,
         type: resourceForm.type,
@@ -102,6 +127,16 @@ export function ResourcesPage() {
           .map(([mode]) => mode as 'raw' | 'summary'),
         connector_id: resourceForm.connectorId || undefined,
       };
+
+      // Add storage_ref if we uploaded a file
+      if (storageRef) {
+        (payload as any).storage_ref = storageRef;
+        // Set size_bytes from the file
+        if (resourceForm.file) {
+          (payload as any).size_bytes = resourceForm.file.size;
+        }
+      }
+
       await api.createResource(payload);
       setResourceModalOpen(false);
       setResourceForm(defaultResourceForm);
@@ -113,33 +148,30 @@ export function ResourcesPage() {
     }
   };
 
-  const handleVerifyInit = async () => {
-    setVerificationLoading(true);
-    setVerificationStatus('');
+
+  const handleGeneratePreview = async () => {
+    if (!resourceForm.domain || resourceForm.type !== 'site') return;
+    setGeneratingPreview(true);
     try {
-      const out = await api.initSiteVerification(verifyDomain, verifyMethod);
-      setVerifyInit(out);
-      setVerificationStatus(out.verified ? 'Already verified' : 'Pending verification');
+      const url = `https://${resourceForm.domain}${resourceForm.path || '/'}`;
+      const response = await fetch(url);
+      const html = await response.text();
+      const preview = html.substring(0, 500).replace(/<[^>]*>/g, ' ').trim();
+      setResourceForm({ ...resourceForm, samplePreview: preview });
     } catch (err: any) {
-      setVerificationStatus(err.message || 'Verification init failed');
+      setError('Failed to generate preview. Make sure the domain is accessible.');
     } finally {
-      setVerificationLoading(false);
+      setGeneratingPreview(false);
     }
   };
 
-  const handleVerifyCheck = async () => {
-    if (!verifyInit) return;
-    setVerificationLoading(true);
-    try {
-      const out = await api.checkSiteVerification(verifyDomain, verifyMethod, verifyInit.token);
-      setVerificationStatus(out.verified ? 'Domain verified 🎉' : out.error || 'Validation failed');
-      if (out.verified) {
-        await loadPage();
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setResourceForm({ ...resourceForm, file });
+      if (!resourceForm.title) {
+        setResourceForm({ ...resourceForm, file, title: file.name });
       }
-    } catch (err: any) {
-      setVerificationStatus(err.message || 'Verification check failed');
-    } finally {
-      setVerificationLoading(false);
     }
   };
 
@@ -156,7 +188,7 @@ export function ResourcesPage() {
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-sm text-fog">Connect origins, verify domains, and publish listings.</p>
+          <p className="text-sm text-fog">Publish and manage your resource listings.</p>
         </div>
         <Button onClick={() => setResourceModalOpen(true)} className="gap-2">
           <Plus className="h-4 w-4" />
@@ -192,76 +224,6 @@ export function ResourcesPage() {
           helper="Per listing"
         />
       </div>
-
-      <Card>
-        <CardContent className="p-6">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ember/10">
-                <Shield className="h-5 w-5 text-ember" />
-              </div>
-              <div>
-                <h3 className="text-parchment font-medium">Verify your domain</h3>
-                <p className="text-sm text-fog">Prove you own the surface you’re selling</p>
-              </div>
-            </div>
-            <div className="space-y-4">
-              <div className="flex flex-col gap-2">
-                <label className="text-sm text-fog">Domain</label>
-                <input
-                  value={verifyDomain}
-                  onChange={(e) => setVerifyDomain(e.target.value)}
-                  placeholder="example.com"
-                  className="rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
-                />
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {(['dns', 'file'] as const).map((method) => (
-                  <button
-                    key={method}
-                    onClick={() => setVerifyMethod(method)}
-                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm capitalize ${
-                      verifyMethod === method ? 'bg-sand text-ink' : 'bg-white/5 text-fog hover:text-parchment'
-                    }`}
-                  >
-                    {method === 'dns' ? <Globe className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
-                    {method} method
-                  </button>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  onClick={handleVerifyInit}
-                  disabled={!verifyDomain || verificationLoading}
-                  className="gap-2"
-                >
-                  {verificationLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
-                  Generate instructions
-                </Button>
-                {verifyInit && (
-                  <Button
-                    variant="outline"
-                    onClick={handleVerifyCheck}
-                    disabled={verificationLoading}
-                  >
-                    Check status
-                  </Button>
-                )}
-              </div>
-              {verifyInit && (
-                <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-fog">
-                  <p className="font-medium text-parchment">Verification token</p>
-                  <p className="break-all text-xs text-sand">{verifyInit.token}</p>
-                  {verifyInit.instructions && <p className="mt-2 text-xs">{verifyInit.instructions}</p>}
-                </div>
-              )}
-              {verificationStatus && (
-                <div className="rounded-lg border border-white/5 bg-white/5 px-3 py-2 text-sm text-parchment">
-                  {verificationStatus}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <Card>
@@ -371,7 +333,14 @@ export function ResourcesPage() {
             <Field label="Type">
               <select
                 value={resourceForm.type}
-                onChange={(e) => setResourceForm({ ...resourceForm, type: e.target.value as ResourceFormState['type'] })}
+                onChange={(e) => {
+                  const newType = e.target.value as ResourceFormState['type'];
+                  setResourceForm({
+                    ...resourceForm,
+                    type: newType,
+                    format: FORMAT_OPTIONS[newType][0]
+                  });
+                }}
                 className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
               >
                 <option value="site">Site</option>
@@ -380,11 +349,17 @@ export function ResourcesPage() {
               </select>
             </Field>
             <Field label="Format">
-              <input
+              <select
                 value={resourceForm.format}
                 onChange={(e) => setResourceForm({ ...resourceForm, format: e.target.value })}
                 className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
-              />
+              >
+                {FORMAT_OPTIONS[resourceForm.type].map((fmt) => (
+                  <option key={fmt} value={fmt}>
+                    {fmt}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Visibility">
               <select
@@ -399,25 +374,65 @@ export function ResourcesPage() {
               </select>
             </Field>
           </div>
+          {resourceForm.type === 'file' && (
+            <Field label="Upload File">
+              <div className="flex items-center gap-3">
+                <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/20 bg-black/40 px-4 py-2 text-sm text-parchment hover:border-sand/40">
+                  <Upload className="h-4 w-4" />
+                  {resourceForm.file ? resourceForm.file.name : 'Choose file'}
+                  <input type="file" onChange={handleFileChange} className="hidden" />
+                </label>
+                {resourceForm.file && (
+                  <span className="text-xs text-fog">
+                    {(resourceForm.file.size / 1024).toFixed(1)} KB
+                  </span>
+                )}
+              </div>
+            </Field>
+          )}
           {resourceForm.type === 'site' && (
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Domain">
-                <input
-                  value={resourceForm.domain}
-                  onChange={(e) => setResourceForm({ ...resourceForm, domain: e.target.value })}
-                  placeholder="example.com"
-                  className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
-                />
-              </Field>
-              <Field label="Path">
-                <input
-                  value={resourceForm.path}
-                  onChange={(e) => setResourceForm({ ...resourceForm, path: e.target.value })}
-                  placeholder="/docs"
-                  className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
-                />
-              </Field>
-            </div>
+            <>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="Domain">
+                  {domains.filter((d) => d.status === 'verified').length === 0 ? (
+                    <div className="rounded-lg border border-ember/30 bg-ember/10 px-3 py-2 text-sm">
+                      <p className="text-ember">No verified domains.</p>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/dashboard/provider/domains')}
+                        className="text-sand hover:underline"
+                      >
+                        Verify a domain first
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      required
+                      value={resourceForm.domain}
+                      onChange={(e) => setResourceForm({ ...resourceForm, domain: e.target.value })}
+                      className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
+                    >
+                      <option value="">Select verified domain</option>
+                      {domains
+                        .filter((d) => d.status === 'verified')
+                        .map((d) => (
+                          <option key={d._id} value={d.domain}>
+                            {d.domain}
+                          </option>
+                        ))}
+                    </select>
+                  )}
+                </Field>
+                <Field label="Path">
+                  <input
+                    value={resourceForm.path}
+                    onChange={(e) => setResourceForm({ ...resourceForm, path: e.target.value })}
+                    placeholder="/docs"
+                    className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
+                  />
+                </Field>
+              </div>
+            </>
           )}
           <Field label="Summary">
             <textarea
@@ -427,14 +442,33 @@ export function ResourcesPage() {
               className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-parchment focus:border-sand/40 focus:outline-none"
             />
           </Field>
-          <Field label="Sample preview">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-fog">Sample preview</label>
+              {resourceForm.type === 'site' && resourceForm.domain && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleGeneratePreview}
+                  disabled={generatingPreview}
+                  className="h-7 gap-1 text-xs"
+                >
+                  {generatingPreview ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3" />
+                  )}
+                  Auto-generate
+                </Button>
+              )}
+            </div>
             <textarea
               value={resourceForm.samplePreview}
               onChange={(e) => setResourceForm({ ...resourceForm, samplePreview: e.target.value })}
               rows={3}
               className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm text-parchment focus:border-sand/40 focus:outline-none"
             />
-          </Field>
+          </div>
           <Field label="Tags (comma separated)">
             <input
               value={resourceForm.tags}
@@ -495,11 +529,23 @@ export function ResourcesPage() {
             </select>
           </Field>
           <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="ghost" onClick={() => setResourceModalOpen(false)}>
+            <Button type="button" variant="ghost" onClick={() => setResourceModalOpen(false)} disabled={formSubmitting}>
               Cancel
             </Button>
-            <Button type="submit" disabled={formSubmitting}>
-              {formSubmitting ? 'Saving…' : 'Create'}
+            <Button type="submit" disabled={formSubmitting} className="gap-2">
+              {uploadingFile ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Uploading file…
+                </>
+              ) : formSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating…
+                </>
+              ) : (
+                'Create'
+              )}
             </Button>
           </div>
         </form>

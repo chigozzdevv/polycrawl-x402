@@ -1,7 +1,7 @@
 import { getDb } from '@/config/db.js';
 
 export type SiteVerificationDoc = {
-  _id: string; // providerId:domain
+  _id: string;
   provider_id: string;
   domain: string;
   method: 'dns' | 'file';
@@ -19,6 +19,16 @@ function key(providerId: string, domain: string) {
 export async function getSiteVerification(providerId: string, domain: string): Promise<SiteVerificationDoc | null> {
   const db = await getDb();
   return (await db.collection<SiteVerificationDoc>('site_verifications').findOne({ _id: key(providerId, domain) } as any)) || null;
+}
+
+export async function getAllProviderDomains(providerId: string): Promise<SiteVerificationDoc[]> {
+  const db = await getDb();
+  return await db.collection<SiteVerificationDoc>('site_verifications').find({ provider_id: providerId }).sort({ created_at: -1 }).toArray();
+}
+
+export async function deleteDomain(providerId: string, domain: string) {
+  const db = await getDb();
+  await db.collection<SiteVerificationDoc>('site_verifications').deleteOne({ _id: key(providerId, domain) });
 }
 
 export async function upsertSiteVerification(doc: Omit<SiteVerificationDoc, '_id' | 'created_at' | 'status'> & { status?: SiteVerificationDoc['status'] }) {

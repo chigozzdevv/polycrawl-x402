@@ -60,7 +60,7 @@ export async function createOrReplaceChallenge(doc: WalletChallengeDoc) {
   const db = await getDb();
   await db.collection<WalletChallengeDoc>('wallet_challenges').updateOne(
     { chain: doc.chain, address: doc.address },
-    { $set: { ...doc } },
+    { $setOnInsert: { _id: doc._id, created_at: doc.created_at }, $set: { nonce: doc.nonce, expires_at: doc.expires_at, used: doc.used } },
     { upsert: true }
   );
 }

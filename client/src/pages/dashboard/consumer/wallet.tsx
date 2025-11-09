@@ -5,40 +5,13 @@ import { Button } from '@/components/ui/button';
 import { api } from '@/services/api';
 import type { Wallet } from '@/services/api';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { Wallet as WalletIcon, TrendingDown, Plus, ArrowUpRight, X, Loader2, Copy, Check } from 'lucide-react';
-
-function Modal({
-  open,
-  title,
-  onClose,
-  children,
-}: {
-  open: boolean;
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#0d0d0d] p-6 shadow-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-parchment">{title}</h3>
-          <button onClick={onClose} className="text-fog hover:text-parchment">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
+import { Modal } from '@/components/ui/modal';
+import { Wallet as WalletIcon, TrendingDown, Plus, ArrowUpRight, Loader2, Copy, Check } from 'lucide-react';
 
 export function WalletPage() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [showSignupBanner, setShowSignupBanner] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [depositAmount, setDepositAmount] = useState('');
@@ -53,12 +26,6 @@ export function WalletPage() {
 
   useEffect(() => {
     loadWallets();
-    if (typeof window !== 'undefined') {
-      if (window.localStorage.getItem('signup_bonus_recent') === 'true') {
-        setShowSignupBanner(true);
-        window.localStorage.removeItem('signup_bonus_recent');
-      }
-    }
   }, []);
 
   const loadWallets = async () => {
@@ -87,7 +54,13 @@ export function WalletPage() {
       setDepositAmount('');
       await loadWallets();
     } catch (err: any) {
-      setDepositStatus({ tone: 'error', message: err.message || 'Unable to create deposit' });
+      if (err?.message === 'DAILY_LIMIT_REACHED') {
+        setDepositStatus({ tone: 'error', message: 'Daily mint limit reached. Try again tomorrow.' });
+      } else if (err?.message === 'AMOUNT_EXCEEDS_LIMIT') {
+        setDepositStatus({ tone: 'error', message: `Single request cannot exceed $${MAX_REQUEST_AMOUNT.toLocaleString()}.` });
+      } else {
+        setDepositStatus({ tone: 'error', message: err.message || 'Unable to create deposit' });
+      }
     } finally {
       setDepositSubmitting(false);
     }
@@ -159,15 +132,6 @@ const MAX_REQUEST_AMOUNT = 5000;
   return (
     <>
     <div className="space-y-6">
-      {showSignupBanner && (
-        <div className="rounded-2xl border border-sand/30 bg-sand/10 px-4 py-3 text-sm text-black md:text-parchment">
-          <div className="font-semibold">Devnet airdrop en route</div>
-          <p className="text-xs md:text-sm text-black/70 md:text-fog">
-            We’re minting your 1000 devnet USDC. Balances update once Solana confirms the transfer (takes ~30s).
-          </p>
-        </div>
-      )}
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

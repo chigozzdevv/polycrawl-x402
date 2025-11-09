@@ -7,6 +7,8 @@ import argon2 from 'argon2';
 import { SignJWT } from 'jose';
 import { initUserWallets } from '@/features/wallets/wallets.service.js';
 import { fundAgentOnSignup } from '@/services/solana/solana.service.js';
+import { getOrCreateProvider } from '@/features/providers/providers.service.js';
+import bs58 from 'bs58';
 
 type AuthBundle = {
   token: string;
@@ -48,6 +50,7 @@ export async function signupService(name: string, email: string, password: strin
   const userId = 'u_' + randomUUID();
   await insertUser({ _id: userId, name, email, password_hash: hash, roles: ['user'], created_at: new Date().toISOString() });
   await initUserWallets(userId);
+  await getOrCreateProvider(userId);
   fundAgentOnSignup(userId).catch(() => {});
   try {
     const auth = await buildAuthBundle(userId);
@@ -63,6 +66,7 @@ export async function loginService(email: string, password: string) {
   if (!user) return { ok: false as const, error: 'INVALID_CREDENTIALS' };
   const ok = await argon2.verify(user.password_hash, password);
   if (!ok) return { ok: false as const, error: 'INVALID_CREDENTIALS' };
+  await getOrCreateProvider(user._id);
   try {
     const auth = await buildAuthBundle(user._id);
     return { ok: true as const, auth };
@@ -112,10 +116,19 @@ export async function createWalletChallenge(address: string, chain: 'solana') {
 }
 
 function parseSignature(sig: string): Uint8Array {
+  try {
+    const decoded = bs58.decode(sig);
+    if (decoded.length === 64) return decoded;
+  } catch {}
   if (/^[0-9a-fA-F]+$/.test(sig) && sig.length % 2 === 0) {
-    return Uint8Array.from(sig.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)));
+    const decoded = Uint8Array.from(sig.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)));
+    if (decoded.length === 64) return decoded;
   }
-  return Uint8Array.from(Buffer.from(sig, 'base64'));
+  const decoded = Uint8Array.from(Buffer.from(sig, 'base64'));
+  if (decoded.length !== 64) {
+    throw new Error('bad signature size');
+  }
+  return decoded;
 }
 
 export async function verifyWalletLink(userId: string, address: string, chain: 'solana', signature: string, nonce: string) {
@@ -142,8 +155,39 @@ export async function walletLogin(address: string, chain: 'solana', signature: s
   const valid = nacl.sign.detached.verify(msg, sig, pub.toBytes());
   if (!valid) return { ok: false as const, error: 'INVALID_SIGNATURE' };
   const link = await findWalletLinkByAddress(chain, address);
-  if (!link) return { ok: false as const, error: 'WALLET_NOT_LINKED' };
+  if (!link) {
+    const userId = 'u_' + randomUUID();
+    const shortAddr = address.slice(0, 8);
+    await insertUser({
+      _id: userId,
+      name: `Wallet ${shortAddr}`,
+      email: `${address}@wallet.local`,
+      password_hash: '',
+      roles: ['user'],
+      created_at: new Date().toISOString(),
+    });
+    await initUserWallets(userId);
+    await getOrCreateProvider(userId);
+    await upsertWalletLink({
+      _id: 'wl_' + randomUUID(),
+      user_id: userId,
+      chain,
+      address,
+      created_at: new Date().toISOString(),
+      last_verified_at: new Date().toISOString(),
+    });
+    fundAgentOnSignup(userId).catch(() => {});
+    await markChallengeUsed(ch._id);
+    try {
+      const auth = await buildAuthBundle(userId);
+      return { ok: true as const, auth };
+    } catch (err: any) {
+      if (err?.message === 'SERVER_MISCONFIG') return { ok: false as const, error: 'SERVER_MISCONFIG' };
+      throw err;
+    }
+  }
   await markChallengeUsed(ch._id);
+  await getOrCreateProvider(link.user_id);
   try {
     const auth = await buildAuthBundle(link.user_id);
     return { ok: true as const, auth };

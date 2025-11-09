@@ -11,9 +11,9 @@ export function Modal({ open, title, onClose, children }: ModalProps) {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
-      <div className="relative w-full max-w-2xl rounded-2xl border border-white/20 bg-ink p-6 shadow-2xl">
-        <div className="mb-6 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 overflow-y-auto">
+      <div className="relative w-full max-w-2xl my-8 rounded-2xl border border-white/20 bg-[#0a0a0a] shadow-2xl max-h-[calc(100vh-4rem)]">
+        <div className="sticky top-0 z-10 bg-[#0a0a0a] rounded-t-2xl border-b border-white/10 px-6 py-4 flex items-center justify-between">
           <h3 className="text-xl font-semibold text-parchment">{title}</h3>
           <button
             onClick={onClose}
@@ -22,7 +22,9 @@ export function Modal({ open, title, onClose, children }: ModalProps) {
             <X className="h-4 w-4" />
           </button>
         </div>
-        {children}
+        <div className="overflow-y-auto max-h-[calc(100vh-12rem)] p-6">
+          {children}
+        </div>
       </div>
     </div>
   )

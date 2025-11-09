@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Logo } from '@/components/logo'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/auth-context'
@@ -15,12 +16,14 @@ import { EarningsPage } from './provider/earnings'
 import { AnalyticsPage } from './provider/analytics'
 import { ConnectorsPage } from './provider/connectors'
 import { ProviderSettingsPage } from './provider/settings'
+import { DomainsPage } from './provider/domains'
 import { SignupSuccessModal } from '@/components/signup-success-modal'
-import { LogOut, User, Menu, X, Settings, CreditCard, Receipt, LayoutDashboard, Wallet, PlugZap, TrendingUp, BarChart3, Database, ChevronDown } from 'lucide-react'
+import { LogOut, User, Menu, X, Settings, CreditCard, Receipt, LayoutDashboard, Wallet, PlugZap, TrendingUp, BarChart3, Database, ChevronDown, Globe } from 'lucide-react'
 
 const SIGNUP_FLAG = 'signup_bonus_pending'
 const SIGNUP_RECENT_FLAG = 'signup_bonus_recent'
 const WORKSPACE_PREF_KEY = 'polycrawl_workspace_preference'
+const SECTION_PREF_PREFIX = 'polycrawl_section_'
 
 type Section = {
   id: string
@@ -35,6 +38,8 @@ type DashboardNavigateDetail = { workspace?: Workspace; section: string }
 
 export function Dashboard() {
   const { logout } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [workspace, setWorkspace] = useState<Workspace>('consumer')
   const [activeSection, setActiveSection] = useState<string>('overview')
   const [showMobileNav, setShowMobileNav] = useState(false)
@@ -44,10 +49,31 @@ export function Dashboard() {
   const [providerChecking, setProviderChecking] = useState(true)
   const [providerProvisioning, setProviderProvisioning] = useState(false)
   const [workspaceMessage, setWorkspaceMessage] = useState<string | null>(null)
-  const pendingSectionRef = useRef<string | null>(null)
   const workspaceButtonRef = useRef<HTMLButtonElement | null>(null)
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null)
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
+
+  const sectionsByWorkspace = useMemo<Record<Workspace, Section[]>>(
+    () => ({
+      consumer: [
+        { id: 'overview', label: 'Overview', description: 'Snapshot of usage', icon: LayoutDashboard, render: () => <ConsumerOverview /> },
+        { id: 'wallet', label: 'Wallet', description: 'Balances and flows', icon: Wallet, render: () => <WalletPage /> },
+        { id: 'transactions', label: 'Transactions', description: 'Recent crawls', icon: CreditCard, render: () => <TransactionsPage /> },
+        { id: 'receipts', label: 'Receipts', description: 'Proof of payment', icon: Receipt, render: () => <ReceiptsPage /> },
+        { id: 'settings', label: 'Settings', description: 'Alerts & automation', icon: Settings, render: () => <ConsumerSettingsPage /> },
+      ],
+      provider: [
+        { id: 'overview-provider', label: 'Overview', description: 'Provider dashboard', icon: LayoutDashboard, render: () => <OverviewPage /> },
+        { id: 'domains', label: 'Domains', description: 'Verify ownership', icon: Globe, render: () => <DomainsPage /> },
+        { id: 'resources', label: 'Resources', description: 'Manage listings', icon: Database, render: () => <ResourcesPage /> },
+        { id: 'connectors', label: 'Connectors', description: 'Auth & secrets', icon: PlugZap, render: () => <ConnectorsPage /> },
+        { id: 'earnings', label: 'Earnings', description: 'Revenue tracking', icon: TrendingUp, render: () => <EarningsPage /> },
+        { id: 'analytics', label: 'Analytics', description: 'Performance metrics', icon: BarChart3, render: () => <AnalyticsPage /> },
+        { id: 'settings', label: 'Settings', description: 'Account & access', icon: Settings, render: () => <ProviderSettingsPage /> },
+      ],
+    }),
+    []
+  )
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -103,28 +129,19 @@ export function Dashboard() {
     if (typeof window === 'undefined') return
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<DashboardNavigateDetail>).detail
-      if (!detail?.section) return
-      if (detail.workspace && detail.workspace !== workspace) {
-        pendingSectionRef.current = detail.section
-        setWorkspace(detail.workspace)
-      } else {
-        setActiveSection(detail.section)
-      }
+      const targetWorkspace: Workspace =
+        detail.workspace === 'provider' ? 'provider' : detail.workspace === 'consumer' ? 'consumer' : workspace
+      const wsSections = sectionsByWorkspace[targetWorkspace]
+      const fallback = wsSections[0]?.id || (targetWorkspace === 'provider' ? 'overview-provider' : 'overview')
+      const targetSection =
+        detail.section && wsSections.find((s) => s.id === detail.section) ? detail.section : fallback
+      navigate(`/app/${targetWorkspace}/${targetSection}`)
     }
     window.addEventListener('dashboard:navigate', handler as EventListener)
     return () => {
       window.removeEventListener('dashboard:navigate', handler as EventListener)
     }
-  }, [workspace])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      window.localStorage.setItem(WORKSPACE_PREF_KEY, workspace)
-    } catch (e) {
-      console.warn('Failed to save workspace preference to localStorage:', e)
-    }
-  }, [workspace])
+  }, [workspace, navigate, sectionsByWorkspace])
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -142,43 +159,32 @@ export function Dashboard() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [workspaceMenuOpen])
 
-  const consumerSections: Section[] = useMemo(
-    () => [
-      { id: 'overview', label: 'Overview', description: 'Snapshot of usage', icon: LayoutDashboard, render: () => <ConsumerOverview /> },
-      { id: 'wallet', label: 'Wallet', description: 'Balances and flows', icon: Wallet, render: () => <WalletPage /> },
-      { id: 'transactions', label: 'Transactions', description: 'Recent crawls', icon: CreditCard, render: () => <TransactionsPage /> },
-      { id: 'receipts', label: 'Receipts', description: 'Proof of payment', icon: Receipt, render: () => <ReceiptsPage /> },
-      { id: 'settings', label: 'Settings', description: 'Alerts & automation', icon: Settings, render: () => <ConsumerSettingsPage /> },
-    ],
-    []
-  )
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      window.localStorage.setItem(WORKSPACE_PREF_KEY, workspace)
+      window.localStorage.setItem(`${SECTION_PREF_PREFIX}${workspace}`, activeSection)
+    } catch {
+      // ignore persistence errors
+    }
+  }, [workspace, activeSection])
 
-  const providerSections: Section[] = useMemo(
-    () => [
-      { id: 'overview-provider', label: 'Overview', description: 'Provider dashboard', icon: LayoutDashboard, render: () => <OverviewPage /> },
-      { id: 'resources', label: 'Resources', description: 'Manage listings', icon: Database, render: () => <ResourcesPage /> },
-      { id: 'connectors', label: 'Connectors', description: 'Auth & secrets', icon: PlugZap, render: () => <ConnectorsPage /> },
-      { id: 'earnings', label: 'Earnings', description: 'Revenue tracking', icon: TrendingUp, render: () => <EarningsPage /> },
-      { id: 'analytics', label: 'Analytics', description: 'Performance metrics', icon: BarChart3, render: () => <AnalyticsPage /> },
-      { id: 'settings', label: 'Settings', description: 'Account & access', icon: Settings, render: () => <ProviderSettingsPage /> },
-    ],
-    []
-  )
-
-  const sections = workspace === 'consumer' ? consumerSections : providerSections
+  const sections = sectionsByWorkspace[workspace]
 
   useEffect(() => {
-    if (!sections.find((s) => s.id === activeSection)) {
-      setActiveSection(sections[0]?.id || 'overview')
+    const segments = location.pathname.split('/').filter(Boolean)
+    const ws = segments[1] === 'provider' ? 'provider' : 'consumer'
+    const wsSections = sectionsByWorkspace[ws]
+    const defaultSection = wsSections[0]?.id || (ws === 'provider' ? 'overview-provider' : 'overview')
+    const candidate = segments[2] || defaultSection
+    const validSection = wsSections.find((s) => s.id === candidate) ? candidate : defaultSection
+    if (workspace !== ws) {
+      setWorkspace(ws)
     }
-  }, [workspace, sections, activeSection])
-
-  useEffect(() => {
-    if (pendingSectionRef.current && sections.find((s) => s.id === pendingSectionRef.current)) {
-      setActiveSection(pendingSectionRef.current)
-      pendingSectionRef.current = null
+    if (activeSection !== validSection) {
+      setActiveSection(validSection)
     }
-  }, [sections])
+  }, [location.pathname, sectionsByWorkspace])
 
   const renderSidebarNav = (variant: 'desktop' | 'mobile') => (
     <nav className={variant === 'desktop' ? 'space-y-2' : 'space-y-1'}>
@@ -192,7 +198,7 @@ export function Dashboard() {
           <button
             key={section.id}
             onClick={() => {
-              setActiveSection(section.id)
+              navigate(`/app/${workspace}/${section.id}`)
               setShowMobileNav(false)
             }}
             className={`${baseClasses} ${isActive ? activeClasses : inactiveClasses}`}
@@ -210,9 +216,18 @@ export function Dashboard() {
 
   const activeRenderer = sections.find((section) => section.id === activeSection)?.render ?? (() => null)
 
+  const defaultSectionFor = (ws: Workspace) =>
+    sectionsByWorkspace[ws][0]?.id || (ws === 'provider' ? 'overview-provider' : 'overview')
+
   const handleWorkspaceChange = async (target: Workspace) => {
     if (target === workspace) return
     setWorkspaceMessage(null)
+
+    const goToPreferred = () => {
+      const saved = getSavedSection(target)
+      const fallback = defaultSectionFor(target)
+      navigate(`/app/${target}/${saved || fallback}`)
+    }
 
     if (target === 'provider' && !providerReady) {
       if (providerChecking || providerProvisioning) return
@@ -221,10 +236,9 @@ export function Dashboard() {
       try {
         await api.createProvider()
         setProviderReady(true)
-        setWorkspace('provider')
+        goToPreferred()
         setWorkspaceMessage(null)
       } catch (err: any) {
-        setWorkspace('consumer')
         setWorkspaceMessage(err?.message || 'Unable to enable provider workspace.')
       } finally {
         setProviderProvisioning(false)
@@ -232,13 +246,26 @@ export function Dashboard() {
       return
     }
 
-    setWorkspace(target)
+    goToPreferred()
   }
 
   const workspaceOptions: Array<{ id: Workspace; label: string }> = [
     { id: 'consumer', label: 'Consumer' },
     { id: 'provider', label: 'Provider' },
   ]
+
+  const getSavedSection = (ws: Workspace) => {
+    if (typeof window === 'undefined') return null
+    try {
+      const saved = window.localStorage.getItem(`${SECTION_PREF_PREFIX}${ws}`)
+      if (saved && sectionsByWorkspace[ws].some((s) => s.id === saved)) {
+        return saved
+      }
+    } catch {
+      // ignore
+    }
+    return null
+  }
 
   return (
     <div className="min-h-screen bg-ink text-parchment">
@@ -282,9 +309,6 @@ export function Dashboard() {
                 >
                   {workspaceOptions.map((option) => {
                     const isSelected = workspace === option.id
-                    const isDisabled =
-                      option.id === 'provider' &&
-                      (!providerReady && !providerProvisioning && !providerChecking)
                     return (
                       <button
                         key={option.id}
@@ -292,13 +316,11 @@ export function Dashboard() {
                           setWorkspaceMenuOpen(false)
                           handleWorkspaceChange(option.id)
                         }}
-                        disabled={isDisabled}
                         className={`w-full rounded-xl px-3 py-2 text-left text-sm ${
                           isSelected ? 'bg-sand text-ink' : 'text-parchment hover:bg-white/10'
-                        } ${isDisabled ? 'cursor-not-allowed opacity-60' : ''}`}
+                        }`}
                       >
                         {option.label}
-                        {isDisabled && <span className="ml-2 text-xs text-fog">Setup required</span>}
                       </button>
                     )
                   })}

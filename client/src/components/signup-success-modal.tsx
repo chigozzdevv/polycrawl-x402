@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import { WalletIcon, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -8,6 +9,7 @@ type SignupSuccessModalProps = {
 }
 
 export function SignupSuccessModal({ open, onClose }: SignupSuccessModalProps) {
+  const navigate = useNavigate()
   return (
     <AnimatePresence>
       {open && (
@@ -33,7 +35,7 @@ export function SignupSuccessModal({ open, onClose }: SignupSuccessModalProps) {
               <p className="mb-6 text-sm text-fog">
                 Congrats! You received <span className="font-semibold text-sand">1000 devnet USDC</span> to explore the platform.
               </p>
-              <Button onClick={onClose} className="w-full bg-[#cfbea0] text-black hover:bg-[#cfbea0]">
+              <Button onClick={() => { onClose(); navigate('/app'); }} className="w-full bg-[#cfbea0] text-black hover:bg-[#cfbea0]">
                 Thanks :) <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
