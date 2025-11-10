@@ -206,7 +206,7 @@ export async function createAuthorizationCode(input: AuthorizationInput) {
   return code;
 }
 
-export async function issueTokensFromCode(code: string, redirectUri: string | undefined, codeVerifier: string, resource: string) {
+export async function issueTokensFromCode(code: string, redirectUri: string | undefined, codeVerifier: string, resource?: string) {
   const codeDoc = await consumeAuthorizationCode(code);
   if (!codeDoc) throw new Error('invalid_grant');
   if (redirectUri && codeDoc.redirect_uri !== redirectUri) {
@@ -217,9 +217,21 @@ export async function issueTokensFromCode(code: string, redirectUri: string | un
     await deleteAuthorizationCode(code);
     throw new Error('invalid_grant');
   }
-  if (codeDoc.resource !== resource) {
-    await deleteAuthorizationCode(code);
-    throw new Error('invalid_target');
+  // Always bind the token audience to the authorized resource to satisfy RS validation.
+  const tokenResource = codeDoc.resource;
+  if (resource) {
+    try {
+      const provided = new URL(resource);
+      const authorized = new URL(codeDoc.resource);
+      const same = resource === codeDoc.resource || provided.origin === authorized.origin;
+      if (!same) {
+        await deleteAuthorizationCode(code);
+        throw new Error('invalid_target');
+      }
+    } catch {
+      await deleteAuthorizationCode(code);
+      throw new Error('invalid_target');
+    }
   }
   const expectedChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
   if (expectedChallenge !== codeDoc.code_challenge) {
@@ -229,7 +241,7 @@ export async function issueTokensFromCode(code: string, redirectUri: string | un
   const clientIdStr = String(codeDoc.client_id);
   const userIdStr = String(codeDoc.user_id);
   const agentId = await ensureAgentForClient(userIdStr, clientIdStr);
-  const resourceStr = String(codeDoc.resource);
+  const resourceStr = String(tokenResource);
   const tokens = await createTokenResponse({
     sub: userIdStr,
     client_id: clientIdStr,
