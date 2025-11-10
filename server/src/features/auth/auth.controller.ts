@@ -1,7 +1,10 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import { z } from 'zod';
 import { signupInput, loginInput, forgotPasswordInput, resetPasswordInput, walletChallengeInput, walletVerifyInput, changePasswordInput } from '@/features/auth/auth.schema.js';
 import { createWalletChallenge, performPasswordReset, requestPasswordReset, verifyWalletLink, walletLogin, signupService, loginService, changeUserPassword } from '@/features/auth/auth.service.js';
 import { buildSessionCookie, buildSessionClearCookie } from '@/utils/session-cookie.js';
+import { loadEnv } from '@/config/env.js';
+import { jwtVerify } from 'jose';
 
 export async function signupController(req: FastifyRequest, reply: FastifyReply) {
   const body = signupInput.parse(req.body);
@@ -68,4 +71,41 @@ export async function walletLoginController(req: FastifyRequest, reply: FastifyR
 export async function logoutController(_req: FastifyRequest, reply: FastifyReply) {
   reply.header('Set-Cookie', buildSessionClearCookie());
   return reply.send({ ok: true });
+}
+
+const sessionExchangeInput = z.object({
+  token: z.string(),
+  return_to: z.string().optional(),
+});
+
+export async function sessionExchangeController(req: FastifyRequest, reply: FastifyReply) {
+  const body = sessionExchangeInput.parse(req.body);
+  const env = loadEnv();
+  if (!env.JWT_SECRET) {
+    return reply.code(500).send({ error: 'SERVER_MISCONFIGURED' });
+  }
+  try {
+    await jwtVerify(body.token, new TextEncoder().encode(env.JWT_SECRET));
+  } catch {
+    return reply.code(401).send({ error: 'AUTH_INVALID' });
+  }
+
+  reply.header('Set-Cookie', buildSessionCookie(body.token));
+
+  const baseUrl = `${req.protocol}://${req.headers.host}`;
+  let target = body.return_to;
+  if (!target) {
+    target = env.CLIENT_APP_URL || baseUrl;
+  } else {
+    try {
+      const url = new URL(target);
+      if (url.origin !== baseUrl) {
+        target = baseUrl;
+      }
+    } catch {
+      target = baseUrl;
+    }
+  }
+
+  return reply.redirect(target, 302);
 }

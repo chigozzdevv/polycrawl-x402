@@ -4,6 +4,7 @@ import { LandingPage } from '@/pages/landing'
 import { AuthPage } from '@/pages/auth'
 import { Dashboard } from '@/pages/dashboard'
 import { AuthProvider, useAuth } from '@/context/auth-context'
+import { redirectThroughSession } from '@/lib/session-redirect'
 
 const WORKSPACE_PREF_KEY = 'polycrawl_workspace_preference'
 const SECTION_PREF_PREFIX = 'polycrawl_section_'
@@ -48,7 +49,7 @@ function AuthScreen() {
 
   useEffect(() => {
     if (isAuthenticated && returnTo) {
-      window.location.href = returnTo
+      redirectThroughSession(returnTo)
     }
   }, [isAuthenticated, returnTo])
 

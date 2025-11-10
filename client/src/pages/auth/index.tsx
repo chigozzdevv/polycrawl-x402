@@ -9,6 +9,7 @@ import { walletService } from '@/services/wallet'
 import type { WalletAdapterId, WalletDescriptor } from '@/services/wallet'
 import { Mail, Lock, User, ArrowLeft, WalletIcon } from 'lucide-react'
 import { SignupSuccessModal } from '@/components/signup-success-modal'
+import { redirectThroughSession } from '@/lib/session-redirect'
 
 const SIGNUP_BONUS_FLAG = 'signup_bonus_pending'
 
@@ -58,7 +59,7 @@ export function AuthPage() {
 
   const redirectIfNeeded = () => {
     if (returnTo) {
-      window.location.href = returnTo
+      redirectThroughSession(returnTo)
       return true
     }
     return false
