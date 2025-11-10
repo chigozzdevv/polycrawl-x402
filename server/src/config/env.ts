@@ -13,6 +13,7 @@ const EnvSchema = z.object({
   TAP_TARGET_URL: z.string().url().optional(),
   TAP_PRIVATE_KEY_PATH: z.string().optional(),
   TAP_KEY_ID: z.string().optional(),
+  TAP_LOCAL_PUBLIC_KEY_PATH: z.string().optional(),
   ED25519_PRIVATE_KEY_PATH: z.string().optional(),
   KEY_ENCRYPTION_KEY: z.string().min(16).optional(),
   X402_FACILITATOR_URL: z.string().url().optional(),

@@ -31,6 +31,7 @@ function getBaseUrl(req: FastifyRequest) {
 }
 
 export async function verifyTapMock(req: FastifyRequest) {
+  // Claude does not support TAP today, so we sign + verify locally on Claude's behalf to prove the stack is TAP-ready once they do.
   const baseUrl = getBaseUrl(req)
   if (!baseUrl) return
   const targetUrl = `${baseUrl}/tap/mock`

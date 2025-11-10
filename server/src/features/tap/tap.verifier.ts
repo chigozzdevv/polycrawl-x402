@@ -26,7 +26,7 @@ async function loadLocalPublicKey(): Promise<{ keyId: string; pem: string } | nu
   if (localPublicKey) return localPublicKey;
 
   const env = loadEnv();
-  const localKeyPath = (env as any).TAP_LOCAL_PUBLIC_KEY_PATH;
+  const localKeyPath = env.TAP_LOCAL_PUBLIC_KEY_PATH || (env as any).TAP_LOCAL_PUBLIC_KEY_PATH;
   if (!localKeyPath) return null;
 
   try {
@@ -38,7 +38,11 @@ async function loadLocalPublicKey(): Promise<{ keyId: string; pem: string } | nu
       .replace(/-----END PUBLIC KEY-----/g, '')
       .replace(/\s/g, '');
 
-    const keyId = createHash('sha256').update(normalized).digest('base64url');
+    const derivedKeyId = createHash('sha256').update(normalized).digest('base64url');
+    const keyId = env.TAP_KEY_ID || derivedKeyId;
+    if (env.TAP_KEY_ID && env.TAP_KEY_ID !== derivedKeyId) {
+      console.warn('TAP key ID does not match local public key hash, falling back to configured key id');
+    }
     localPublicKey = { keyId, pem };
     return localPublicKey;
   } catch (error) {
