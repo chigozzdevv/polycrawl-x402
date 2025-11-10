@@ -1,14 +1,15 @@
 import { api } from '@/services/api'
 
-function getSessionEndpoint(returnTo: string) {
-  try {
-    const url = new URL(returnTo)
-    return `${url.origin}/auth/session`
-  } catch {
-    const envBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '')
-    if (envBase) return `${envBase}/auth/session`
-    return '/auth/session'
+function getSessionEndpoint() {
+  const envBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '')
+  if (envBase) return `${envBase}/auth/session`
+
+  if (typeof window !== 'undefined') {
+    const apiOrigin = window.location.origin.replace(/\/$/, '')
+    return `${apiOrigin}/auth/session`
   }
+
+  return '/auth/session'
 }
 
 export function redirectThroughSession(returnTo: string) {
@@ -21,7 +22,7 @@ export function redirectThroughSession(returnTo: string) {
 
   const form = document.createElement('form')
   form.method = 'POST'
-  form.action = getSessionEndpoint(returnTo)
+  form.action = getSessionEndpoint()
   form.style.display = 'none'
 
   const tokenInput = document.createElement('input')
