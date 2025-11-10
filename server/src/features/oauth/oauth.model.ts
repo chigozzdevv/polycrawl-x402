@@ -5,7 +5,8 @@ export type OAuthClientDoc = {
   _id: string;
   client_name?: string;
   redirect_uris: string[];
-  token_endpoint_auth_method: 'none';
+  token_endpoint_auth_method: 'none' | 'client_secret_post';
+  client_secret_hash?: string;
   scope?: string;
   created_at: string;
   updated_at: string;

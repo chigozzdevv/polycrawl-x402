@@ -14,6 +14,7 @@ import {
   deleteAuthorizationCode,
   findRefreshToken,
   revokeRefreshToken,
+  type OAuthClientDoc,
 } from '@/features/oauth/oauth.model.js';
 import { ensureAgentForClient } from '@/features/agents/agents.service.js';
 
@@ -26,11 +27,13 @@ type CreateClientParams = {
 
 type RegisterClientResult = {
   client_id: string;
-  token_endpoint_auth_method: 'none';
+  token_endpoint_auth_method: 'none' | 'client_secret_post';
   client_id_issued_at: number;
   redirect_uris: string[];
   client_name?: string;
   scope?: string;
+  client_secret?: string;
+  client_secret_expires_at?: number | null;
 };
 
 type AuthorizationInput = {
@@ -79,6 +82,32 @@ function loadConfig() {
   const accessTtl = Number(env.OAUTH_ACCESS_TOKEN_TTL || 300);
   const refreshTtl = Number(env.OAUTH_REFRESH_TOKEN_TTL || (60 * 60 * 24 * 30));
   return { issuer, resource, accessTtl, refreshTtl };
+}
+
+export function getResourcePathSuffix() {
+  const { resource } = loadConfig();
+  try {
+    const resourceUrl = new URL(resource);
+    const trimmed = resourceUrl.pathname.replace(/\/+$/, '');
+    if (!trimmed || trimmed === '/') {
+      return '';
+    }
+    return trimmed;
+  } catch {
+    return '';
+  }
+}
+
+export function getProtectedResourceMetadataUrls(baseUrl: string) {
+  const suffix = getResourcePathSuffix();
+  const base = `${baseUrl}/.well-known/oauth-protected-resource`;
+  return suffix ? [base, `${base}${suffix}`] : [base];
+}
+
+function getAuthorizationServerUrls(baseUrl: string) {
+  const suffix = getResourcePathSuffix();
+  const base = `${baseUrl}/.well-known/oauth-authorization-server`;
+  return suffix ? [base, `${base}${suffix}`] : [base];
 }
 
 async function getSigningKey() {
@@ -130,11 +159,20 @@ export async function getJwksResponse() {
 
 export async function registerClient(params: CreateClientParams): Promise<RegisterClientResult> {
   const client_id = generateClientId();
+  const authMethod: 'none' | 'client_secret_post' =
+    params.token_endpoint_auth_method === 'none' ? 'none' : 'client_secret_post';
+  let clientSecret: string | undefined;
+  let clientSecretHash: string | undefined;
+  if (authMethod === 'client_secret_post') {
+    clientSecret = 'cs_' + randomBytes(32).toString('hex');
+    clientSecretHash = hashToken(clientSecret);
+  }
   const doc = {
     _id: client_id,
     client_name: params.client_name,
     redirect_uris: params.redirect_uris,
-    token_endpoint_auth_method: 'none' as const,
+    token_endpoint_auth_method: authMethod,
+    client_secret_hash: clientSecretHash,
     scope: params.scope,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -144,9 +182,11 @@ export async function registerClient(params: CreateClientParams): Promise<Regist
     client_id,
     client_name: doc.client_name,
     redirect_uris: doc.redirect_uris,
-    token_endpoint_auth_method: 'none',
+    token_endpoint_auth_method: authMethod,
     client_id_issued_at: Math.floor(Date.now() / 1000),
     scope: doc.scope,
+    client_secret: clientSecret,
+    client_secret_expires_at: clientSecret ? null : undefined,
   };
 }
 
@@ -317,7 +357,7 @@ export function buildProtectedResourceMetadata(baseUrl: string) {
   const { resource } = loadConfig();
   return {
     resource,
-    authorization_servers: [`${baseUrl}/.well-known/oauth-authorization-server`],
+    authorization_servers: getAuthorizationServerUrls(baseUrl),
   };
 }
 
@@ -331,8 +371,23 @@ export function buildAuthorizationServerMetadata(baseUrl: string) {
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: ['S256'],
-    token_endpoint_auth_methods_supported: ['none'],
+    token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
     scopes_supported: ['mcp'],
     claims_supported: ['sub', 'aud', 'iss', 'exp', 'scope', 'client_id', 'jti', 'agent_id'],
   };
+}
+
+export function assertClientSecret(client: OAuthClientDoc, providedSecret?: string) {
+  if (client.token_endpoint_auth_method === 'client_secret_post') {
+    if (!providedSecret) {
+      throw new Error('invalid_client');
+    }
+    if (!client.client_secret_hash) {
+      throw new Error('invalid_client');
+    }
+    const providedHash = hashToken(providedSecret);
+    if (providedHash !== client.client_secret_hash) {
+      throw new Error('invalid_client');
+    }
+  }
 }

@@ -10,16 +10,20 @@ import {
   buildProtectedResourceMetadata,
   buildAuthorizationServerMetadata,
   getJwksResponse,
+  getResourcePathSuffix,
+  assertClientSecret,
 } from '@/features/oauth/oauth.service.js';
 import { requireUser } from '@/middleware/auth.js';
 import { loadEnv } from '@/config/env.js';
 
-const registrationInput = z.object({
-  redirect_uris: z.array(z.string().url()).min(1),
-  client_name: z.string().optional(),
-  token_endpoint_auth_method: z.enum(['none']).optional(),
-  scope: z.string().optional(),
-});
+const registrationInput = z
+  .object({
+    redirect_uris: z.array(z.string().url()).min(1),
+    client_name: z.string().optional(),
+    token_endpoint_auth_method: z.enum(['none', 'client_secret_post']).optional(),
+    scope: z.string().optional(),
+  })
+  .passthrough();
 
 const authorizeQuery = z.object({
   response_type: z.literal('code'),
@@ -33,15 +37,18 @@ const authorizeQuery = z.object({
   response_mode: z.enum(['json', 'query']).optional(),
 });
 
-const tokenBody = z.object({
-  grant_type: z.enum(['authorization_code', 'refresh_token']),
-  code: z.string().optional(),
-  redirect_uri: z.string().url().optional(),
-  code_verifier: z.string().optional(),
-  refresh_token: z.string().optional(),
-  client_id: z.string().optional(),
-  resource: z.string().url().optional(),
-});
+const tokenBody = z
+  .object({
+    grant_type: z.enum(['authorization_code', 'refresh_token']),
+    code: z.string().optional(),
+    redirect_uri: z.string().url().optional(),
+    code_verifier: z.string().optional(),
+    refresh_token: z.string().optional(),
+    client_id: z.string().optional(),
+    client_secret: z.string().optional(),
+    resource: z.string().url().optional(),
+  })
+  .passthrough();
 
 function getBaseUrl(req: FastifyRequest) {
   const origin = req.headers['x-forwarded-proto']
@@ -59,19 +66,17 @@ function sendAuthError(reply: FastifyReply, error: string, description?: string)
 
 export async function registerOAuthRoutes(app: FastifyInstance) {
   const r = app.withTypeProvider<ZodTypeProvider>();
+  const resourceSuffix = getResourcePathSuffix();
 
   r.post('/oauth/register', {
     schema: { body: registrationInput },
     handler: async (req, reply) => {
       const body = registrationInput.parse(req.body);
-      if (body.token_endpoint_auth_method && body.token_endpoint_auth_method !== 'none') {
-        return reply.status(400).send({ error: 'invalid_client_metadata', error_description: 'Unsupported token endpoint auth method' });
-      }
       const result = await registerClient({
         client_name: body.client_name,
         redirect_uris: body.redirect_uris,
         scope: body.scope,
-        token_endpoint_auth_method: 'none',
+        token_endpoint_auth_method: body.token_endpoint_auth_method,
       });
       return reply.status(201).send(result);
     },
@@ -128,7 +133,8 @@ export async function registerOAuthRoutes(app: FastifyInstance) {
           if (!body.code || !body.redirect_uri || !body.code_verifier || !body.client_id) {
             return sendAuthError(reply, 'invalid_request', 'Missing parameters');
           }
-          await ensureClientExists(body.client_id);
+          const client = await ensureClientExists(body.client_id);
+          assertClientSecret(client, body.client_secret);
           const tokens = await issueTokensFromCode(body.code, body.redirect_uri, body.code_verifier, resource);
           reply.header('Cache-Control', 'no-store');
           return reply.send({
@@ -143,7 +149,8 @@ export async function registerOAuthRoutes(app: FastifyInstance) {
         }
         if (body.grant_type === 'refresh_token') {
           if (!body.refresh_token || !body.client_id) return sendAuthError(reply, 'invalid_request', 'Missing parameters');
-          await ensureClientExists(body.client_id);
+          const client = await ensureClientExists(body.client_id);
+          assertClientSecret(client, body.client_secret);
           const tokens = await issueTokensFromRefreshToken(body.refresh_token, body.client_id, resource);
           reply.header('Cache-Control', 'no-store');
           return reply.send({
@@ -170,12 +177,26 @@ export async function registerOAuthRoutes(app: FastifyInstance) {
     reply.header('Cache-Control', 'no-store');
     return reply.send(metadata);
   });
+  if (resourceSuffix) {
+    app.get(`/.well-known/oauth-protected-resource${resourceSuffix}`, async (req, reply) => {
+      const metadata = buildProtectedResourceMetadata(getBaseUrl(req));
+      reply.header('Cache-Control', 'no-store');
+      return reply.send(metadata);
+    });
+  }
 
   app.get('/.well-known/oauth-authorization-server', async (req, reply) => {
     const metadata = buildAuthorizationServerMetadata(getBaseUrl(req));
     reply.header('Cache-Control', 'no-store');
     return reply.send(metadata);
   });
+  if (resourceSuffix) {
+    app.get(`/.well-known/oauth-authorization-server${resourceSuffix}`, async (req, reply) => {
+      const metadata = buildAuthorizationServerMetadata(getBaseUrl(req));
+      reply.header('Cache-Control', 'no-store');
+      return reply.send(metadata);
+    });
+  }
 
   app.get('/.well-known/oauth-jwks.json', async (_req, reply) => {
     const jwks = await getJwksResponse();

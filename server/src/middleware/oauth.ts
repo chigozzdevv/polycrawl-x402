@@ -1,8 +1,11 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { verifyAccessToken } from '@/features/oauth/oauth.service.js';
+import { verifyAccessToken, getProtectedResourceMetadataUrls } from '@/features/oauth/oauth.service.js';
 
 function buildWwwAuthenticate(baseUrl: string) {
-  return `Bearer realm="Polycrawl MCP", authorization_uri="${baseUrl}/.well-known/oauth-protected-resource"`;
+  const metadataUrls = getProtectedResourceMetadataUrls(baseUrl);
+  const scopedUrl = metadataUrls[metadataUrls.length - 1];
+  const baseMetadataUrl = metadataUrls[0];
+  return `Bearer realm="Polycrawl MCP", resource_metadata="${scopedUrl}", authorization_uri="${baseMetadataUrl}"`;
 }
 
 export async function requireOAuth(req: FastifyRequest, reply: FastifyReply) {
