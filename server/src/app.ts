@@ -15,6 +15,7 @@ import { registerAnalyticsRoutes } from '@/features/analytics/analytics.routes.j
 import { registerResourcesRoutes } from '@/features/resources/resources.routes.js';
 import { registerReceiptsRoutes } from '@/features/receipts/receipts.routes.js';
 import { registerConnectorsRoutes } from '@/features/connectors/connectors.routes.js';
+import { registerTapMockRoutes } from '@/features/tap/tap.mock.routes.js';
 
 export function buildApp() {
   const app = Fastify({ logger: true }).withTypeProvider<ZodTypeProvider>();
@@ -42,6 +43,7 @@ export function buildApp() {
   app.register(registerCapsRoutes, { prefix: '/' });
   app.register(registerAnalyticsRoutes, { prefix: '/' });
   app.register(registerOAuthRoutes);
+  app.register(registerTapMockRoutes);
   app.register(registerMcpRoutes, { prefix: '/mcp' });
 
   app.get('/health', async () => ({ status: 'ok' }));

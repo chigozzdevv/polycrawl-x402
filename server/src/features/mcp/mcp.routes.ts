@@ -17,6 +17,8 @@ export async function registerMcpRoutes(app: FastifyInstance) {
     handler: async (req, reply) => {
       await requireOAuth(req, reply);
       if (reply.sent) return;
+      // Claude doesn't emit TAP headers today, so we sign & verify on its behalf.
+      // Whenever Claude supports TAP directly, this hook will just no-op.
       const forwarded = await forwardTapIfConfigured(req, reply);
       if (forwarded || reply.sent) return;
 
