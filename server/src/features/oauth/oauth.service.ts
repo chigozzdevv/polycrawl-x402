@@ -360,8 +360,9 @@ export function buildProtectedResourceMetadata(baseUrl: string) {
 }
 
 export function buildAuthorizationServerMetadata(baseUrl: string) {
+  const { issuer } = loadConfig();
   return {
-    issuer: baseUrl,
+    issuer,
     authorization_endpoint: `${baseUrl}/oauth/authorize`,
     token_endpoint: `${baseUrl}/oauth/token`,
     registration_endpoint: `${baseUrl}/oauth/register`,
