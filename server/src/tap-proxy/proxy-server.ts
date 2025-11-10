@@ -34,6 +34,45 @@ export async function buildProxyServer(config: ProxyConfig) {
   }
   const keyId = config.keyId || generateKeyId(derivedPublicKeyPem!);
 
+  // Pass through OAuth discovery and registration endpoints without authentication
+  app.get('/.well-known/oauth-authorization-server', async (request, reply) => {
+    try {
+      const response = await fetch(`${config.targetUrl}/.well-known/oauth-authorization-server`);
+      const data = await response.json();
+      return reply.code(response.status).send(data);
+    } catch (error: any) {
+      app.log.error({ error }, 'OAuth discovery failed');
+      return reply.code(502).send({ error: 'BAD_GATEWAY', message: error.message });
+    }
+  });
+
+  app.get('/.well-known/oauth-protected-resource/*', async (request, reply) => {
+    const path = (request.params as any)['*'];
+    try {
+      const response = await fetch(`${config.targetUrl}/.well-known/oauth-protected-resource/${path}`);
+      const data = await response.json();
+      return reply.code(response.status).send(data);
+    } catch (error: any) {
+      app.log.error({ error }, 'OAuth resource discovery failed');
+      return reply.code(502).send({ error: 'BAD_GATEWAY', message: error.message });
+    }
+  });
+
+  app.post('/register', async (request, reply) => {
+    try {
+      const response = await fetch(`${config.targetUrl}/register`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(request.body),
+      });
+      const data = await response.json();
+      return reply.code(response.status).send(data);
+    } catch (error: any) {
+      app.log.error({ error }, 'OAuth registration failed');
+      return reply.code(502).send({ error: 'BAD_GATEWAY', message: error.message });
+    }
+  });
+
   app.all('/proxy/*', async (request, reply) => {
     const proxyPath = (request.params as any)['*'];
     const targetUrl = `${config.targetUrl}/${proxyPath}${request.url.includes('?') ? request.url.substring(request.url.indexOf('?')) : ''}`;
