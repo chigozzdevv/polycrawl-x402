@@ -1,18 +1,27 @@
 import { api } from '@/services/api'
 
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+function getSessionEndpoint(returnTo: string) {
+  try {
+    const url = new URL(returnTo)
+    return `${url.origin}/auth/session`
+  } catch {
+    const envBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '')
+    if (envBase) return `${envBase}/auth/session`
+    return '/auth/session'
+  }
+}
 
 export function redirectThroughSession(returnTo: string) {
   if (!returnTo) return
   const token = api.getToken()
-  if (!apiBaseUrl || !token) {
+  if (!token) {
     window.location.href = returnTo
     return
   }
 
   const form = document.createElement('form')
   form.method = 'POST'
-  form.action = `${apiBaseUrl}/auth/session`
+  form.action = getSessionEndpoint(returnTo)
   form.style.display = 'none'
 
   const tokenInput = document.createElement('input')

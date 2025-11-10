@@ -101,6 +101,12 @@ export async function buildProxyServer(config: ProxyConfig) {
 
   app.get('/health', async () => ({ status: 'ok', keyId }));
 
+  app.get('/', async () => ({
+    status: 'ok',
+    message: 'Polycrawl TAP proxy',
+    forwardTarget: config.targetUrl,
+  }));
+
   return app;
 }
 
