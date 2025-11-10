@@ -32,7 +32,7 @@ const authorizeQuery = z.object({
   state: z.string().optional(),
   code_challenge: z.string().min(43).max(128),
   code_challenge_method: z.enum(['S256']),
-  resource: z.string().url(),
+  resource: z.string().url().optional(),
   scope: z.string().optional(),
   response_mode: z.enum(['json', 'query']).optional(),
 });
@@ -89,7 +89,8 @@ export async function registerOAuthRoutes(app: FastifyInstance) {
       const query = authorizeQuery.parse(req.query);
       const env = loadEnv();
       const resource = env.OAUTH_RESOURCE || `${getBaseUrl(req)}/mcp`;
-      if (query.resource !== resource) {
+      const requestedResource = query.resource || resource;
+      if (requestedResource !== resource) {
         return sendAuthError(reply, 'invalid_target', 'Unsupported resource');
       }
       const client = await ensureClientExists(query.client_id);
@@ -103,7 +104,7 @@ export async function registerOAuthRoutes(app: FastifyInstance) {
         redirect_uri: query.redirect_uri,
         code_challenge: query.code_challenge,
         code_challenge_method: query.code_challenge_method,
-        resource: query.resource,
+        resource: requestedResource,
         scope,
       });
       if (query.response_mode === 'json') {
