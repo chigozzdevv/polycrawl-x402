@@ -4,7 +4,25 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { api } from '@/services/api';
 import type { Domain, SiteVerificationInitResponse } from '@/services/api';
-import { Globe, Link2, Shield, CheckCircle, Clock, Loader2, Trash2, Plus } from 'lucide-react';
+import { Globe, Link2, Shield, CheckCircle, Clock, Loader2, Trash2, Plus, RefreshCw } from 'lucide-react';
+
+const iconButtonBase =
+  'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand/70 focus-visible:ring-offset-2 focus-visible:ring-offset-ink disabled:cursor-not-allowed disabled:opacity-60';
+
+const getErrorMessage = (err: unknown, fallback: string) => {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string' && err.trim().length > 0) return err;
+  return fallback;
+};
+
+const sanitizeDomain = (value: string) => {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return '';
+  const withoutProtocol = trimmed.replace(/^https?:\/\//, '');
+  const withoutPathOrQuery = withoutProtocol.split(/[/?#]/)[0];
+  const withoutPort = withoutPathOrQuery.split(':')[0];
+  return withoutPort.replace(/\.$/, '');
+};
 
 export function DomainsPage() {
   const [domains, setDomains] = useState<Domain[]>([]);
@@ -15,6 +33,8 @@ export function DomainsPage() {
   const [verificationLoading, setVerificationLoading] = useState(false);
   const [verifyInit, setVerifyInit] = useState<SiteVerificationInitResponse | null>(null);
   const [addingDomain, setAddingDomain] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [checkingDomainId, setCheckingDomainId] = useState<string | null>(null);
 
   useEffect(() => {
     loadDomains();
@@ -27,32 +47,42 @@ export function DomainsPage() {
     }
   }, [error]);
 
-  const loadDomains = async () => {
-    setIsLoading(true);
+  const loadDomains = async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setIsLoading(true);
+    }
     try {
       const data = await api.getDomains();
       setDomains(data);
       setError('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to load domains');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to load domains'));
     } finally {
-      setIsLoading(false);
+      if (!options?.silent) {
+        setIsLoading(false);
+      }
     }
   };
 
   const handleVerifyInit = async () => {
+    const normalizedDomain = sanitizeDomain(verifyDomain);
+    if (!normalizedDomain) {
+      setError('Please enter a valid domain (e.g. example.com)');
+      return;
+    }
     setVerificationLoading(true);
     setVerifyInit(null);
     try {
-      const result = await api.initSiteVerification(verifyDomain, verifyMethod);
+      setVerifyDomain(normalizedDomain);
+      const result = await api.initSiteVerification(normalizedDomain, verifyMethod);
       setVerifyInit(result);
       if (result.verified) {
         await loadDomains();
         setVerifyDomain('');
       }
       setError('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to initialize verification');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to initialize verification'));
     } finally {
       setVerificationLoading(false);
     }
@@ -60,9 +90,14 @@ export function DomainsPage() {
 
   const handleVerifyCheck = async () => {
     if (!verifyInit) return;
+    const normalizedDomain = sanitizeDomain(verifyDomain);
+    if (!normalizedDomain) {
+      setError('Please enter a valid domain before verifying');
+      return;
+    }
     setVerificationLoading(true);
     try {
-      const result = await api.checkSiteVerification(verifyDomain, verifyMethod, verifyInit.token);
+      const result = await api.checkSiteVerification(normalizedDomain, verifyMethod, verifyInit.token);
       if (result.verified) {
         setVerifyInit(null);
         setVerifyDomain('');
@@ -71,8 +106,8 @@ export function DomainsPage() {
       } else {
         setError(result.error || 'Verification failed. Check your DNS/file setup.');
       }
-    } catch (err: any) {
-      setError(err.message || 'Verification check failed');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Verification check failed'));
     } finally {
       setVerificationLoading(false);
     }
@@ -84,8 +119,55 @@ export function DomainsPage() {
       await api.deleteDomain(domain);
       await loadDomains();
       setError('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete domain');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to delete domain'));
+    }
+  };
+
+  const handleRefreshDomains = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    let hadFailure = false;
+    try {
+      const pendingList = domains.filter((d) => d.status === 'pending');
+      for (const domain of pendingList) {
+        try {
+          const result = await api.checkSiteVerification(domain.domain, domain.method, domain.token);
+          if (!result.verified) {
+            hadFailure = true;
+            setError(`${domain.domain}: ${result.error || 'Verification failed. Check your DNS/file setup.'}`);
+          }
+        } catch (err) {
+          hadFailure = true;
+          setError(`${domain.domain}: ${getErrorMessage(err, 'Verification check failed')}`);
+        }
+      }
+      await loadDomains({ silent: true });
+      if (!hadFailure) {
+        setError('');
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to refresh domains'));
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleRetryPendingDomain = async (domain: Domain) => {
+    if (checkingDomainId === domain._id) return;
+    setCheckingDomainId(domain._id);
+    try {
+      const result = await api.checkSiteVerification(domain.domain, domain.method, domain.token);
+      if (result.verified) {
+        await loadDomains({ silent: true });
+        setError('');
+      } else {
+        setError(`${domain.domain}: ${result.error || 'Verification failed. Check your DNS/file setup.'}`);
+      }
+    } catch (err) {
+      setError(`${domain.domain}: ${getErrorMessage(err, 'Verification check failed')}`);
+    } finally {
+      setCheckingDomainId(null);
     }
   };
 
@@ -160,6 +242,7 @@ export function DomainsPage() {
                   <input
                     value={verifyDomain}
                     onChange={(e) => setVerifyDomain(e.target.value)}
+                    onBlur={() => setVerifyDomain((value) => sanitizeDomain(value))}
                     placeholder="example.com"
                     className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
                   />
@@ -243,9 +326,14 @@ export function DomainsPage() {
                       </p>
                     </div>
                   </div>
-                  <Button onClick={() => handleDelete(domain.domain)} variant="ghost" className="h-8 w-8 p-0 text-ember hover:bg-ember/10">
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(domain.domain)}
+                    aria-label={`Delete ${domain.domain}`}
+                    className={`${iconButtonBase} border-ember/40 text-ember hover:border-ember/60 hover:bg-ember/10`}
+                  >
                     <Trash2 className="h-4 w-4" />
-                  </Button>
+                  </button>
                 </motion.div>
               ))}
             </div>
@@ -256,7 +344,18 @@ export function DomainsPage() {
       {pendingDomains.length > 0 && (
         <Card>
           <CardContent className="p-6">
-            <h3 className="mb-4 text-sm font-medium uppercase tracking-wide text-fog">Pending Verification</h3>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-medium uppercase tracking-wide text-fog">Pending Verification</h3>
+                <button
+                  type="button"
+                  onClick={handleRefreshDomains}
+                  aria-label="Refresh domains"
+                  disabled={isRefreshing}
+                  className={`${iconButtonBase} border-white/15 text-fog hover:text-parchment hover:border-white/40 hover:bg-white/5`}
+                >
+                  {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                </button>
+              </div>
             <div className="space-y-2">
               {pendingDomains.map((domain) => (
                 <motion.div
@@ -272,9 +371,29 @@ export function DomainsPage() {
                       <p className="text-xs text-fog capitalize">{domain.method} verification pending</p>
                     </div>
                   </div>
-                  <Button onClick={() => handleDelete(domain.domain)} variant="ghost" className="h-8 w-8 p-0 text-ember hover:bg-ember/10">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleRetryPendingDomain(domain)}
+                      aria-label={`Retry verification for ${domain.domain}`}
+                      disabled={checkingDomainId === domain._id}
+                      className={`${iconButtonBase} border-sand/40 text-sand hover:border-sand/60 hover:bg-sand/10`}
+                    >
+                      {checkingDomainId === domain._id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(domain.domain)}
+                      aria-label={`Delete ${domain.domain}`}
+                      className={`${iconButtonBase} border-ember/40 text-ember hover:border-ember/60 hover:bg-ember/10`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </motion.div>
               ))}
             </div>

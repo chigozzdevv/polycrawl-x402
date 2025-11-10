@@ -295,9 +295,14 @@ class ApiService {
     options: RequestInit = {}
   ): Promise<T> {
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>),
     };
+
+    const hasBody = options.body !== undefined && options.body !== null;
+    const isFormDataBody = hasBody && typeof FormData !== 'undefined' && options.body instanceof FormData;
+    if (hasBody && !isFormDataBody && !('Content-Type' in headers)) {
+      headers['Content-Type'] = 'application/json';
+    }
 
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`;
