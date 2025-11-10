@@ -19,6 +19,7 @@ type ResourceFormState = {
   tags: string;
   priceFlat: string;
   pricePerKb: string;
+  flatFeeEnabled: boolean;
   visibility: 'public' | 'restricted';
   modes: { raw: boolean; summary: boolean };
   connectorId: string;
@@ -36,6 +37,7 @@ const defaultResourceForm: ResourceFormState = {
   tags: '',
   priceFlat: '',
   pricePerKb: '',
+  flatFeeEnabled: true,
   visibility: 'public',
   modes: { raw: true, summary: false },
   connectorId: '',
@@ -119,8 +121,12 @@ export function ResourcesPage() {
               .map((tag) => tag.trim())
               .filter(Boolean)
           : undefined,
-        price_flat: resourceForm.priceFlat ? Number(resourceForm.priceFlat) : undefined,
-        price_per_kb: resourceForm.pricePerKb ? Number(resourceForm.pricePerKb) : undefined,
+        price_flat:
+          (resourceForm.type !== 'site' || resourceForm.flatFeeEnabled) && resourceForm.priceFlat
+            ? Number(resourceForm.priceFlat)
+            : undefined,
+        price_per_kb:
+          resourceForm.type === 'site' && resourceForm.pricePerKb ? Number(resourceForm.pricePerKb) : undefined,
         visibility: resourceForm.visibility,
         modes: Object.entries(resourceForm.modes)
           .filter(([, enabled]) => enabled)
@@ -338,7 +344,8 @@ export function ResourcesPage() {
                   setResourceForm({
                     ...resourceForm,
                     type: newType,
-                    format: FORMAT_OPTIONS[newType][0]
+                    format: FORMAT_OPTIONS[newType][0],
+                    flatFeeEnabled: newType !== 'site',
                   });
                 }}
                 options={[
@@ -464,27 +471,49 @@ export function ResourcesPage() {
               className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
             />
           </Field>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Flat price (USD)">
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={resourceForm.priceFlat}
-                onChange={(e) => setResourceForm({ ...resourceForm, priceFlat: e.target.value })}
-                className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
-              />
-            </Field>
-            <Field label="Price per KB (USD)">
-              <input
-                type="number"
-                min="0"
-                step="0.0001"
-                value={resourceForm.pricePerKb}
-                onChange={(e) => setResourceForm({ ...resourceForm, pricePerKb: e.target.value })}
-                className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
-              />
-            </Field>
+          <div className="space-y-4">
+            {resourceForm.type === 'site' && (
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="Price per KB (USD)">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.0001"
+                    value={resourceForm.pricePerKb}
+                    onChange={(e) => setResourceForm({ ...resourceForm, pricePerKb: e.target.value })}
+                    className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
+                  />
+                </Field>
+                <div className="flex flex-col justify-end">
+                  <label className="flex items-center gap-2 text-sm text-fog">
+                    <input
+                      type="checkbox"
+                      checked={resourceForm.flatFeeEnabled}
+                      onChange={(e) =>
+                        setResourceForm({
+                          ...resourceForm,
+                          flatFeeEnabled: e.target.checked,
+                          priceFlat: e.target.checked ? resourceForm.priceFlat : '',
+                        })
+                      }
+                    />
+                    <span>Include base flat fee</span>
+                  </label>
+                </div>
+              </div>
+            )}
+            {(resourceForm.type !== 'site' || resourceForm.flatFeeEnabled) && (
+              <Field label="Flat price (USD)">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={resourceForm.priceFlat}
+                  onChange={(e) => setResourceForm({ ...resourceForm, priceFlat: e.target.value })}
+                  className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
+                />
+              </Field>
+            )}
           </div>
           <Field label="Modes">
             <div className="flex gap-3">
