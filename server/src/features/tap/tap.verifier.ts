@@ -141,6 +141,27 @@ function normalizeHeaders(headers: FastifyRequest['headers']): Record<string, st
   return result;
 }
 
+function getAbsoluteUrl(req: FastifyRequest): string {
+  const protoHeader = req.headers['x-forwarded-proto'];
+  const hostHeader = req.headers['x-forwarded-host'] ?? req.headers.host;
+  const proto = Array.isArray(protoHeader) ? protoHeader[0] : protoHeader;
+  const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
+  const scheme = proto || req.protocol || 'https';
+
+  if (host) {
+    const path = req.url?.startsWith('/') ? req.url : `/${req.url ?? ''}`;
+    return `${scheme}://${host}${path}`;
+  }
+
+  if (req.url?.startsWith('http://') || req.url?.startsWith('https://')) {
+    return req.url;
+  }
+
+  const fallbackHost = req.hostname || 'localhost';
+  const path = req.url?.startsWith('/') ? req.url : `/${req.url ?? ''}`;
+  return `${scheme}://${fallbackHost}${path}`;
+}
+
 export async function verifyTapRequest(req: FastifyRequest): Promise<string> {
   const signatureInput = req.headers['signature-input'];
   const signature = req.headers['signature'];
@@ -148,6 +169,8 @@ export async function verifyTapRequest(req: FastifyRequest): Promise<string> {
 
   let paramsCaptured: SignatureParameters | undefined;
   let nonceToRecord: string | undefined;
+
+  const absoluteUrl = getAbsoluteUrl(req);
 
   const verificationResult = await httpbis.verifyMessage(
     {
@@ -200,7 +223,7 @@ export async function verifyTapRequest(req: FastifyRequest): Promise<string> {
     },
     {
       method: req.method ?? 'GET',
-      url: req.url ?? '/',
+      url: absoluteUrl,
       headers: normalizeHeaders(req.headers),
     }
   );
