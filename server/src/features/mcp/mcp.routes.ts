@@ -21,6 +21,7 @@ export async function registerMcpRoutes(app: FastifyInstance) {
         await verifyTapMock(req);
       } catch (err) {
         app.log.error({ err }, 'tap_mock_failed');
+        return reply.code(502).send({ error: 'TAP_VERIFICATION_FAILED', message: 'Unable to demonstrate TAP locally. Please retry.' });
       }
       reply.hijack();
       try {

@@ -5,7 +5,7 @@ import { createVerifier, httpbis, type Algorithm, type SignatureParameters } fro
 import { isNonceUsed, recordNonce } from '@/features/tap/nonce.model.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, createPublicKey } from 'node:crypto';
 
 type Jwk = {
   kty: string;
@@ -26,29 +26,43 @@ async function loadLocalPublicKey(): Promise<{ keyId: string; pem: string } | nu
   if (localPublicKey) return localPublicKey;
 
   const env = loadEnv();
+  let pem: string | null = null;
+
   const localKeyPath = env.TAP_LOCAL_PUBLIC_KEY_PATH || (env as any).TAP_LOCAL_PUBLIC_KEY_PATH;
-  if (!localKeyPath) return null;
-
-  try {
-    const fullPath = path.resolve(process.cwd(), localKeyPath);
-    const pem = await fs.readFile(fullPath, 'utf-8');
-
-    const normalized = pem
-      .replace(/-----BEGIN PUBLIC KEY-----/g, '')
-      .replace(/-----END PUBLIC KEY-----/g, '')
-      .replace(/\s/g, '');
-
-    const derivedKeyId = createHash('sha256').update(normalized).digest('base64url');
-    const keyId = env.TAP_KEY_ID || derivedKeyId;
-    if (env.TAP_KEY_ID && env.TAP_KEY_ID !== derivedKeyId) {
-      console.warn('TAP key ID does not match local public key hash, falling back to configured key id');
+  if (localKeyPath) {
+    try {
+      const fullPath = path.resolve(process.cwd(), localKeyPath);
+      pem = await fs.readFile(fullPath, 'utf-8');
+    } catch (error) {
+      console.warn('Failed to load TAP public key from path, will try deriving from private key:', error);
     }
-    localPublicKey = { keyId, pem };
-    return localPublicKey;
-  } catch (error) {
-    console.warn('Failed to load local TAP public key:', error);
-    return null;
   }
+
+  if (!pem && env.TAP_PRIVATE_KEY_PATH) {
+    try {
+      const privateKeyPath = path.resolve(process.cwd(), env.TAP_PRIVATE_KEY_PATH);
+      const privateKey = await fs.readFile(privateKeyPath, 'utf-8');
+      pem = createPublicKey(privateKey).export({ type: 'spki', format: 'pem' }) as string;
+      console.log('Derived TAP public key from private key for local verification');
+    } catch (error) {
+      console.warn('Failed to derive TAP public key from private key:', error);
+    }
+  }
+
+  if (!pem) return null;
+
+  const normalized = pem
+    .replace(/-----BEGIN PUBLIC KEY-----/g, '')
+    .replace(/-----END PUBLIC KEY-----/g, '')
+    .replace(/\s/g, '');
+
+  const derivedKeyId = createHash('sha256').update(normalized).digest('base64url');
+  const keyId = env.TAP_KEY_ID || derivedKeyId;
+  if (env.TAP_KEY_ID && env.TAP_KEY_ID !== derivedKeyId) {
+    console.warn('TAP key ID does not match derived public key hash, falling back to configured key id');
+  }
+  localPublicKey = { keyId, pem };
+  return localPublicKey;
 }
 
 async function loadJwks(): Promise<Jwk[]> {
