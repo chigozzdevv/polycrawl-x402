@@ -1,12 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { requireTap } from '@/features/tap/tap.middleware.js';
 import { requireOAuth } from '@/middleware/oauth.js';
 import { discoverInput, discoverResult, fetchInput, fetchResult } from '@/features/mcp/mcp.schema.js';
 import { discoverController, fetchController } from '@/features/mcp/mcp.controller.js';
 import { createMcpRuntime } from '@/features/mcp/mcp.sdk.js';
 import { runWithRequestContext, setSessionContext } from '@/services/oauth/session-store.js';
 import { requireX402ForMcpFetch } from '@/middleware/x402.js';
+import { forwardTapIfConfigured } from '@/features/tap/tap-forwarder.js';
 
 export async function registerMcpRoutes(app: FastifyInstance) {
   const runtime = await createMcpRuntime();
@@ -17,8 +17,8 @@ export async function registerMcpRoutes(app: FastifyInstance) {
     handler: async (req, reply) => {
       await requireOAuth(req, reply);
       if (reply.sent) return;
-      await requireTap(req, reply);
-      if (reply.sent) return;
+      const forwarded = await forwardTapIfConfigured(req, reply);
+      if (forwarded || reply.sent) return;
 
       reply.hijack();
       try {
@@ -49,13 +49,13 @@ export async function registerMcpRoutes(app: FastifyInstance) {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
   r.post('/tools/discover_resources', {
-    preHandler: [requireOAuth, requireTap],
+    preHandler: [requireOAuth],
     schema: { body: discoverInput, response: { 200: discoverResult } },
     handler: discoverController,
   });
 
   r.post('/tools/fetch_content', {
-    preHandler: [requireOAuth, requireTap, requireX402ForMcpFetch],
+    preHandler: [requireOAuth, requireX402ForMcpFetch],
     schema: { body: fetchInput, response: { 200: fetchResult } },
     handler: fetchController,
   });
