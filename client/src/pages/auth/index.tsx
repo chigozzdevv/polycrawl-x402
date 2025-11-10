@@ -41,7 +41,7 @@ export function AuthPage() {
   useEffect(() => {
     if (!isAuthenticated) return
     if (returnTo) {
-      window.location.href = returnTo
+      redirectThroughSession(returnTo)
       return
     }
     if (!showSuccessModal) {
