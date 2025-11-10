@@ -1,4 +1,4 @@
-import { randomBytes, createHash } from 'node:crypto';
+import { randomBytes, createHash, createPrivateKey } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { loadEnv } from '@/config/env.js';
 import { SignJWT, jwtVerify, importPKCS8, exportJWK, importJWK } from 'jose';
@@ -114,7 +114,8 @@ async function getSigningKey() {
     const { ED25519_PRIVATE_KEY_PATH } = process.env as any;
     const pem = ED25519_PRIVATE_KEY_PATH ? await readFile(ED25519_PRIVATE_KEY_PATH, 'utf8') : undefined;
     if (!pem) throw new Error('ED25519_PRIVATE_KEY_PATH is required for OAuth signing');
-    signingKeyPromise = importPKCS8(pem, 'EdDSA');
+    const keyObject = createPrivateKey({ key: pem, format: 'pem' });
+    signingKeyPromise = Promise.resolve(keyObject as any);
   }
   return signingKeyPromise;
 }
