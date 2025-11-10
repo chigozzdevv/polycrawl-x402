@@ -43,6 +43,14 @@ function ProtectedRoute() {
 
 function AuthScreen() {
   const { isAuthenticated, isLoading } = useAuth()
+  const location = useLocation()
+  const returnTo = new URLSearchParams(location.search).get('return_to')
+
+  useEffect(() => {
+    if (isAuthenticated && returnTo) {
+      window.location.href = returnTo
+    }
+  }, [isAuthenticated, returnTo])
 
   if (isLoading) {
     return (
@@ -53,6 +61,9 @@ function AuthScreen() {
   }
 
   if (isAuthenticated) {
+    if (returnTo) {
+      return null
+    }
     return <Navigate to="/app" replace />
   }
 
