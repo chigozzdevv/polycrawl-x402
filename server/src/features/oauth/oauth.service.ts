@@ -160,7 +160,7 @@ export async function getJwksResponse() {
 export async function registerClient(params: CreateClientParams): Promise<RegisterClientResult> {
   const client_id = generateClientId();
   const authMethod: 'none' | 'client_secret_post' =
-    params.token_endpoint_auth_method === 'none' ? 'none' : 'client_secret_post';
+    params.token_endpoint_auth_method === 'client_secret_post' ? 'client_secret_post' : 'none';
   let clientSecret: string | undefined;
   let clientSecretHash: string | undefined;
   if (authMethod === 'client_secret_post') {
