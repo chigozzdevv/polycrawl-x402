@@ -96,20 +96,25 @@ export async function registerOAuthRoutes(app: FastifyInstance) {
       if (!userId) {
         userId = await resolveUserId(req);
       }
+      console.log('[OAUTH DEBUG] /oauth/authorize - userId:', userId);
+      console.log('[OAUTH DEBUG] Cookie header:', req.headers.cookie ? 'present' : 'missing');
       if (!userId) {
         const clientAppUrl = process.env.CLIENT_APP_URL || 'https://polycrawl.com';
         const authPath = process.env.CLIENT_AUTH_PATH || '/auth';
         const redirectTarget = new URL(clientAppUrl);
         redirectTarget.pathname = authPath;
         redirectTarget.searchParams.set('return_to', `${getBaseUrl(req)}${req.url}`);
+        console.log('[OAUTH DEBUG] No userId, redirecting to:', redirectTarget.toString());
         return reply.redirect(redirectTarget.toString(), 302);
       }
       (req as any).userId = userId;
+      console.log('[OAUTH DEBUG] User authenticated, proceeding with authorization');
       const client = await ensureClientExists(query.client_id);
       if (!client.redirect_uris.includes(query.redirect_uri)) {
         return sendAuthError(reply, 'invalid_request', 'redirect_uri mismatch');
       }
       const scope = query.scope ? query.scope.split(' ').filter(Boolean) : ['mcp'];
+      console.log('[OAUTH DEBUG] Creating authorization code with code_challenge:', query.code_challenge);
       const code = await createAuthorizationCode({
         client_id: query.client_id,
         user_id: userId,
@@ -119,6 +124,7 @@ export async function registerOAuthRoutes(app: FastifyInstance) {
         resource: requestedResource,
         scope,
       });
+      console.log('[OAUTH DEBUG] Authorization code created:', code.substring(0, 10) + '...');
       if (query.response_mode === 'json') {
         return reply.send({
           code,

@@ -211,14 +211,14 @@ export async function createAuthorizationCode(input: AuthorizationInput) {
 
 export async function issueTokensFromCode(code: string, redirectUri: string | undefined, codeVerifier: string, resource?: string) {
   const codeDoc = await consumeAuthorizationCode(code);
-  if (!codeDoc) throw new Error('invalid_grant');
+  if (!codeDoc) throw new Error('invalid_grant_code');
   if (redirectUri && codeDoc.redirect_uri !== redirectUri) {
     await deleteAuthorizationCode(code);
-    throw new Error('invalid_grant');
+    throw new Error('invalid_grant_redirect_uri');
   }
   if (codeDoc.expires_at.getTime() < Date.now()) {
     await deleteAuthorizationCode(code);
-    throw new Error('invalid_grant');
+    throw new Error('invalid_grant_expired');
   }
   // Always bind the token audience to the authorized resource to satisfy RS validation.
   const tokenResource = codeDoc.resource;
@@ -237,10 +237,17 @@ export async function issueTokensFromCode(code: string, redirectUri: string | un
     }
   }
   const expectedChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
+  console.log('[PKCE DEBUG] code_verifier length:', codeVerifier.length);
+  console.log('[PKCE DEBUG] code_verifier (first 20 chars):', codeVerifier.substring(0, 20));
+  console.log('[PKCE DEBUG] stored code_challenge:', codeDoc.code_challenge);
+  console.log('[PKCE DEBUG] calculated expectedChallenge:', expectedChallenge);
+  console.log('[PKCE DEBUG] Match:', expectedChallenge === codeDoc.code_challenge);
   if (expectedChallenge !== codeDoc.code_challenge) {
+    console.error('[PKCE ERROR] PKCE verification failed!');
     await deleteAuthorizationCode(code);
-    throw new Error('invalid_grant');
+    throw new Error('invalid_grant_pkce');
   }
+  console.log('[PKCE DEBUG] PKCE verification succeeded!');
   const clientIdStr = String(codeDoc.client_id);
   const userIdStr = String(codeDoc.user_id);
   const agentId = await ensureAgentForClient(userIdStr, clientIdStr);

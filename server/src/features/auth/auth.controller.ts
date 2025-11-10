@@ -80,6 +80,7 @@ const sessionExchangeInput = z.object({
 
 export async function sessionExchangeController(req: FastifyRequest, reply: FastifyReply) {
   const body = sessionExchangeInput.parse(req.body);
+  console.log('[SESSION DEBUG] /auth/session - return_to:', body.return_to);
   const env = loadEnv();
   if (!env.JWT_SECRET) {
     return reply.code(500).send({ error: 'SERVER_MISCONFIGURED' });
@@ -90,29 +91,39 @@ export async function sessionExchangeController(req: FastifyRequest, reply: Fast
     return reply.code(401).send({ error: 'AUTH_INVALID' });
   }
 
-  reply.header('Set-Cookie', buildSessionCookie(body.token, req.headers.host));
+  const cookie = buildSessionCookie(body.token, req.headers.host);
+  console.log('[SESSION DEBUG] Setting cookie:', cookie.substring(0, 50) + '...');
+  reply.header('Set-Cookie', cookie);
 
   const proto = req.headers['x-forwarded-proto'] || req.protocol;
   const baseUrl = `${proto}://${req.headers.host}`;
+  console.log('[SESSION DEBUG] baseUrl:', baseUrl);
   let target = body.return_to;
   if (!target) {
     target = env.CLIENT_APP_URL || baseUrl;
+    console.log('[SESSION DEBUG] No return_to, using default:', target);
   } else {
+    console.log('[SESSION DEBUG] Original target:', target);
     try {
       const url = new URL(target);
+      console.log('[SESSION DEBUG] Parsed URL origin:', url.origin, 'baseUrl:', baseUrl);
       if (url.origin !== baseUrl) {
         const allowed = (process.env.OAUTH_ALLOWED_RETURN_TO_ORIGINS || '')
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean);
+        console.log('[SESSION DEBUG] Allowed origins:', allowed);
         if (!allowed.includes(url.origin)) {
           target = url.pathname + url.search;
+          console.log('[SESSION DEBUG] Origin not allowed, using path only:', target);
         }
       }
-    } catch {
+    } catch (err) {
+      console.log('[SESSION DEBUG] Failed to parse URL:', err);
       target = '/';
     }
   }
 
+  console.log('[SESSION DEBUG] Final redirect target:', target);
   return reply.redirect(target, 302);
 }
