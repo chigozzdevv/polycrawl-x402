@@ -13,7 +13,7 @@ import {
   getResourcePathSuffix,
   assertClientSecret,
 } from '@/features/oauth/oauth.service.js';
-import { requireUser } from '@/middleware/auth.js';
+import { resolveUserId } from '@/middleware/auth.js';
 import { loadEnv } from '@/config/env.js';
 
 const registrationInput = z
@@ -84,7 +84,6 @@ export async function registerOAuthRoutes(app: FastifyInstance) {
 
   r.get('/oauth/authorize', {
     schema: { querystring: authorizeQuery },
-    preHandler: [requireUser],
     handler: async (req, reply) => {
       const query = authorizeQuery.parse(req.query);
       const env = loadEnv();
@@ -93,6 +92,19 @@ export async function registerOAuthRoutes(app: FastifyInstance) {
       if (requestedResource !== resource) {
         return sendAuthError(reply, 'invalid_target', 'Unsupported resource');
       }
+      let userId = (req as any).userId as string | undefined | null;
+      if (!userId) {
+        userId = await resolveUserId(req);
+      }
+      if (!userId) {
+        const clientAppUrl = process.env.CLIENT_APP_URL || 'https://polycrawl.com';
+        const authPath = process.env.CLIENT_AUTH_PATH || '/auth';
+        const redirectTarget = new URL(clientAppUrl);
+        redirectTarget.pathname = authPath;
+        redirectTarget.searchParams.set('return_to', `${getBaseUrl(req)}${req.url}`);
+        return reply.redirect(redirectTarget.toString(), 302);
+      }
+      (req as any).userId = userId;
       const client = await ensureClientExists(query.client_id);
       if (!client.redirect_uris.includes(query.redirect_uri)) {
         return sendAuthError(reply, 'invalid_request', 'redirect_uri mismatch');
@@ -100,7 +112,7 @@ export async function registerOAuthRoutes(app: FastifyInstance) {
       const scope = query.scope ? query.scope.split(' ').filter(Boolean) : ['mcp'];
       const code = await createAuthorizationCode({
         client_id: query.client_id,
-        user_id: (req as any).userId as string,
+        user_id: userId,
         redirect_uri: query.redirect_uri,
         code_challenge: query.code_challenge,
         code_challenge_method: query.code_challenge_method,

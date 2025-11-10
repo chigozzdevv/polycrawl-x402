@@ -28,6 +28,12 @@ const EnvSchema = z.object({
   OAUTH_RESOURCE: z.string().url().optional(),
   OAUTH_ACCESS_TOKEN_TTL: z.string().optional(),
   OAUTH_REFRESH_TOKEN_TTL: z.string().optional(),
+  CLIENT_APP_URL: z.string().url().optional(),
+  CLIENT_AUTH_PATH: z.string().optional(),
+  SESSION_COOKIE_NAME: z.string().optional(),
+  SESSION_COOKIE_DOMAIN: z.string().optional(),
+  SESSION_COOKIE_SECURE: z.string().optional(),
+  SESSION_COOKIE_MAX_AGE: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Logo } from '@/components/logo'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/auth-context'
@@ -18,6 +18,7 @@ export function AuthPage() {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [returnTo, setReturnTo] = useState<string | null>(null)
 
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -28,12 +29,24 @@ export function AuthPage() {
 
   const { login, signup, walletLogin, isAuthenticated } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
-    if (isAuthenticated && !showSuccessModal) {
+    const params = new URLSearchParams(location.search)
+    const rt = params.get('return_to')
+    setReturnTo(rt)
+  }, [location.search])
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+    if (returnTo) {
+      window.location.href = returnTo
+      return
+    }
+    if (!showSuccessModal) {
       navigate('/app')
     }
-  }, [isAuthenticated, navigate, showSuccessModal])
+  }, [isAuthenticated, navigate, showSuccessModal, returnTo])
 
   useEffect(() => {
     const detected = walletService.getAvailableWallets()
@@ -43,10 +56,21 @@ export function AuthPage() {
     }
   }, [])
 
+  const redirectIfNeeded = () => {
+    if (returnTo) {
+      window.location.href = returnTo
+      return true
+    }
+    return false
+  }
+
   const handleSignupBonusFlag = () => {
     try {
       window.localStorage.setItem(SIGNUP_BONUS_FLAG, 'true')
     } catch {}
+    if (redirectIfNeeded()) {
+      return
+    }
     setShowSuccessModal(true)
   }
 
@@ -60,6 +84,7 @@ export function AuthPage() {
         handleSignupBonusFlag()
       } else {
         await login(email, password)
+        if (redirectIfNeeded()) return
       }
     } catch (err: any) {
       const errorMsg = err.message || 'Authentication failed'
@@ -80,6 +105,8 @@ export function AuthPage() {
       await walletLogin(address, signature, challenge.nonce)
       if (mode === 'signup') {
         handleSignupBonusFlag()
+      } else if (redirectIfNeeded()) {
+        return
       }
     } catch (err: any) {
       const errorMsg = err.message || 'Wallet authentication failed'

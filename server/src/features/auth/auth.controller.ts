@@ -1,11 +1,13 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { signupInput, loginInput, forgotPasswordInput, resetPasswordInput, walletChallengeInput, walletVerifyInput, changePasswordInput } from '@/features/auth/auth.schema.js';
 import { createWalletChallenge, performPasswordReset, requestPasswordReset, verifyWalletLink, walletLogin, signupService, loginService, changeUserPassword } from '@/features/auth/auth.service.js';
+import { buildSessionCookie, buildSessionClearCookie } from '@/utils/session-cookie.js';
 
 export async function signupController(req: FastifyRequest, reply: FastifyReply) {
   const body = signupInput.parse(req.body);
   const res = await signupService(body.name, body.email, body.password);
   if (!res.ok) return reply.code(409).send({ error: res.error });
+  reply.header('Set-Cookie', buildSessionCookie(res.auth.token));
   return reply.send(res.auth);
 }
 
@@ -13,6 +15,7 @@ export async function loginController(req: FastifyRequest, reply: FastifyReply) 
   const body = loginInput.parse(req.body);
   const res = await loginService(body.email, body.password);
   if (!res.ok) return reply.code(401).send({ error: res.error });
+  reply.header('Set-Cookie', buildSessionCookie(res.auth.token));
   return reply.send(res.auth);
 }
 
@@ -58,5 +61,11 @@ export async function walletLoginController(req: FastifyRequest, reply: FastifyR
   const body = walletVerifyInput.parse(req.body);
   const res = await walletLogin(body.address, body.chain, body.signature, body.nonce);
   if (!res.ok) return reply.code(400).send({ error: res.error });
+  reply.header('Set-Cookie', buildSessionCookie(res.auth.token));
   return reply.send(res.auth);
+}
+
+export async function logoutController(_req: FastifyRequest, reply: FastifyReply) {
+  reply.header('Set-Cookie', buildSessionClearCookie());
+  return reply.send({ ok: true });
 }

@@ -308,12 +308,15 @@ class ApiService {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
+    const fetchOptions: RequestInit = {
+      ...options,
+      headers,
+      credentials: options.credentials ?? 'include',
+    };
+
     let response: Response;
     try {
-      response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...options,
-        headers,
-      });
+      response = await fetch(`${API_BASE_URL}${endpoint}`, fetchOptions);
     } catch (err: any) {
       throw new Error(err?.message || 'Unable to reach API server');
     }
@@ -341,6 +344,10 @@ class ApiService {
     }
 
     return (await response.text()) as T;
+  }
+
+  async logout(): Promise<void> {
+    await this.request('/auth/logout', { method: 'POST' });
   }
 
   async signup(data: SignupRequest): Promise<AuthResponse> {
