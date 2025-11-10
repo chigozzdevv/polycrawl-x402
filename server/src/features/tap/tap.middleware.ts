@@ -5,7 +5,14 @@ export async function requireTap(req: FastifyRequest, reply: FastifyReply) {
   try {
     await verifyTapRequest(req);
   } catch (err) {
-    req.log.error({ err }, 'tap_verification_failed');
+    req.log.error(
+      {
+        err,
+        signatureInput: req.headers['signature-input'],
+        signature: req.headers.signature,
+      },
+      'tap_verification_failed'
+    );
     return reply.code(401).send({ error: 'TAP_VERIFICATION_FAILED' });
   }
 }

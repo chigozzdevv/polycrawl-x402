@@ -159,8 +159,13 @@ export async function verifyTapRequest(req: FastifyRequest): Promise<string> {
           throw new Error('TAP signature missing required tag (agent-browser-auth or agent-payer-auth)');
         }
 
-        const created = typeof params.created === 'number' ? params.created : undefined;
-        const expires = typeof params.expires === 'number' ? params.expires : undefined;
+        const toSeconds = (value: unknown): number | undefined => {
+          if (typeof value === 'number') return value;
+          if (value instanceof Date) return Math.floor(value.getTime() / 1000);
+          return undefined;
+        };
+        const created = toSeconds(params.created);
+        const expires = toSeconds(params.expires);
         validateTimestamps(created, expires);
 
         const nonce = params.nonce ? String(params.nonce) : undefined;
