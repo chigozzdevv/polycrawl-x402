@@ -101,7 +101,13 @@ export async function sessionExchangeController(req: FastifyRequest, reply: Fast
     try {
       const url = new URL(target);
       if (url.origin !== baseUrl) {
-        target = url.pathname + url.search;
+        const allowed = (process.env.OAUTH_ALLOWED_RETURN_TO_ORIGINS || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (!allowed.includes(url.origin)) {
+          target = url.pathname + url.search;
+        }
       }
     } catch {
       target = '/';

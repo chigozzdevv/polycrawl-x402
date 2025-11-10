@@ -182,6 +182,7 @@ export async function registerOAuthRoutes(app: FastifyInstance) {
       } catch (err: any) {
         const message = typeof err?.message === 'string' ? err.message : 'invalid_grant';
         const error = message === 'invalid_target' ? 'invalid_target' : 'invalid_grant';
+        req.log.warn({ err: message, grant_type: body.grant_type }, 'oauth_token_error');
         return reply.status(400).send({ error, error_description: message });
       }
     },
