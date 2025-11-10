@@ -11,6 +11,7 @@ const EnvSchema = z.object({
   CLOUDINARY_API_SECRET: z.string().optional(),
   TAP_JWKS_URL: z.string().url().optional(),
   ED25519_PRIVATE_KEY: z.string().optional(),
+  ED25519_PRIVATE_KEY_PATH: z.string().optional(),
   KEY_ENCRYPTION_KEY: z.string().min(16).optional(),
   X402_FACILITATOR_URL: z.string().url().optional(),
   X402_NETWORK: z.string().optional(),
