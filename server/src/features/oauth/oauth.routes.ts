@@ -143,7 +143,7 @@ export async function registerOAuthRoutes(app: FastifyInstance) {
       const resource = body.resource || env.OAUTH_RESOURCE || `${baseUrl}/mcp`;
       try {
         if (body.grant_type === 'authorization_code') {
-          if (!body.code || !body.redirect_uri || !body.code_verifier) {
+          if (!body.code || !body.code_verifier) {
             return sendAuthError(reply, 'invalid_request', 'Missing parameters');
           }
           if (body.client_id) {
@@ -182,7 +182,7 @@ export async function registerOAuthRoutes(app: FastifyInstance) {
       } catch (err: any) {
         const message = typeof err?.message === 'string' ? err.message : 'invalid_grant';
         const error = message === 'invalid_target' ? 'invalid_target' : 'invalid_grant';
-        return sendAuthError(reply, error);
+        return reply.status(400).send({ error, error_description: message });
       }
     },
   });

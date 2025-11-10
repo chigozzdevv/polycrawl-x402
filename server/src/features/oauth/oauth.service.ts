@@ -206,10 +206,10 @@ export async function createAuthorizationCode(input: AuthorizationInput) {
   return code;
 }
 
-export async function issueTokensFromCode(code: string, redirectUri: string, codeVerifier: string, resource: string) {
+export async function issueTokensFromCode(code: string, redirectUri: string | undefined, codeVerifier: string, resource: string) {
   const codeDoc = await consumeAuthorizationCode(code);
   if (!codeDoc) throw new Error('invalid_grant');
-  if (codeDoc.redirect_uri !== redirectUri) {
+  if (redirectUri && codeDoc.redirect_uri !== redirectUri) {
     await deleteAuthorizationCode(code);
     throw new Error('invalid_grant');
   }
