@@ -92,7 +92,8 @@ export async function sessionExchangeController(req: FastifyRequest, reply: Fast
 
   reply.header('Set-Cookie', buildSessionCookie(body.token));
 
-  const baseUrl = `${req.protocol}://${req.headers.host}`;
+  const proto = req.headers['x-forwarded-proto'] || req.protocol;
+  const baseUrl = `${proto}://${req.headers.host}`;
   let target = body.return_to;
   if (!target) {
     target = env.CLIENT_APP_URL || baseUrl;
@@ -100,10 +101,10 @@ export async function sessionExchangeController(req: FastifyRequest, reply: Fast
     try {
       const url = new URL(target);
       if (url.origin !== baseUrl) {
-        target = baseUrl;
+        target = url.pathname + url.search;
       }
     } catch {
-      target = baseUrl;
+      target = '/';
     }
   }
 
