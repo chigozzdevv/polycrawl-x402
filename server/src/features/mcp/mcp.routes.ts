@@ -6,7 +6,7 @@ import { discoverController, fetchController } from '@/features/mcp/mcp.controll
 import { createMcpRuntime } from '@/features/mcp/mcp.sdk.js';
 import { runWithRequestContext, setSessionContext } from '@/services/oauth/session-store.js';
 import { requireX402ForMcpFetch } from '@/middleware/x402.js';
-import { forwardTapIfConfigured } from '@/features/tap/tap-forwarder.js';
+import { verifyTapMock } from '@/features/tap/tap-forwarder.js';
 
 export async function registerMcpRoutes(app: FastifyInstance) {
   const runtime = await createMcpRuntime();
@@ -17,11 +17,11 @@ export async function registerMcpRoutes(app: FastifyInstance) {
     handler: async (req, reply) => {
       await requireOAuth(req, reply);
       if (reply.sent) return;
-      // Claude doesn't emit TAP headers today, so we sign & verify on its behalf.
-      // Whenever Claude supports TAP directly, this hook will just no-op.
-      const forwarded = await forwardTapIfConfigured(req, reply);
-      if (forwarded || reply.sent) return;
-
+      try {
+        await verifyTapMock(req);
+      } catch (err) {
+        app.log.error({ err }, 'tap_mock_failed');
+      }
       reply.hijack();
       try {
         const oauth = (req as any).oauth;
