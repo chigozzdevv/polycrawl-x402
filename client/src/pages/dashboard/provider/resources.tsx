@@ -1,11 +1,11 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { api } from '@/services/api';
 import type { Resource, Connector, Domain } from '@/services/api';
-import { Plus, FileText, CheckCircle, Edit, Trash2, Loader2, Upload, RefreshCw } from 'lucide-react';
+import { Plus, FileText, CheckCircle, Edit, Trash2, Loader2, Upload, RefreshCw, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 type ResourceFormState = {
@@ -331,47 +331,41 @@ export function ResourcesPage() {
               />
             </Field>
             <Field label="Type">
-              <select
+              <FancySelect
                 value={resourceForm.type}
-                onChange={(e) => {
-                  const newType = e.target.value as ResourceFormState['type'];
+                onChange={(val) => {
+                  const newType = val as ResourceFormState['type'];
                   setResourceForm({
                     ...resourceForm,
                     type: newType,
                     format: FORMAT_OPTIONS[newType][0]
                   });
                 }}
-                className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
-              >
-                <option value="site">Site</option>
-                <option value="dataset">Dataset</option>
-                <option value="file">File</option>
-              </select>
+                options={[
+                  { value: 'site', label: 'Site' },
+                  { value: 'dataset', label: 'Dataset' },
+                  { value: 'file', label: 'File' },
+                ]}
+              />
             </Field>
             <Field label="Format">
-              <select
+              <FancySelect
                 value={resourceForm.format}
-                onChange={(e) => setResourceForm({ ...resourceForm, format: e.target.value })}
-                className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
-              >
-                {FORMAT_OPTIONS[resourceForm.type].map((fmt) => (
-                  <option key={fmt} value={fmt}>
-                    {fmt}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setResourceForm({ ...resourceForm, format: val })}
+                options={FORMAT_OPTIONS[resourceForm.type].map((fmt) => ({ value: fmt, label: fmt }))}
+              />
             </Field>
             <Field label="Visibility">
-              <select
+              <FancySelect
                 value={resourceForm.visibility}
-                onChange={(e) =>
-                  setResourceForm({ ...resourceForm, visibility: e.target.value as ResourceFormState['visibility'] })
+                onChange={(val) =>
+                  setResourceForm({ ...resourceForm, visibility: val as ResourceFormState['visibility'] })
                 }
-                className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
-              >
-                <option value="public">Public</option>
-                <option value="restricted">Restricted</option>
-              </select>
+                options={[
+                  { value: 'public', label: 'Public' },
+                  { value: 'restricted', label: 'Restricted' },
+                ]}
+              />
             </Field>
           </div>
           {resourceForm.type === 'file' && (
@@ -406,21 +400,15 @@ export function ResourcesPage() {
                       </button>
                     </div>
                   ) : (
-                    <select
-                      required
+                    <FancySelect
                       value={resourceForm.domain}
-                      onChange={(e) => setResourceForm({ ...resourceForm, domain: e.target.value })}
-                      className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
-                    >
-                      <option value="">Select verified domain</option>
-                      {domains
+                      onChange={(val) => setResourceForm({ ...resourceForm, domain: val })}
+                      required
+                      placeholder="Select verified domain"
+                      options={domains
                         .filter((d) => d.status === 'verified')
-                        .map((d) => (
-                          <option key={d._id} value={d.domain}>
-                            {d.domain}
-                          </option>
-                        ))}
-                    </select>
+                        .map((d) => ({ value: d.domain, label: d.domain }))}
+                    />
                   )}
                 </Field>
                 <Field label="Path">
@@ -515,18 +503,12 @@ export function ResourcesPage() {
             </div>
           </Field>
           <Field label="Connector">
-            <select
+            <FancySelect
               value={resourceForm.connectorId}
-              onChange={(e) => setResourceForm({ ...resourceForm, connectorId: e.target.value })}
-              className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-parchment focus:border-sand/40 focus:outline-none"
-            >
-              <option value="">Select connector</option>
-              {connectors.map((connector) => (
-                <option key={connector.id} value={connector.id}>
-                  {connector.type}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setResourceForm({ ...resourceForm, connectorId: val })}
+              placeholder="Select connector"
+              options={connectors.map((connector) => ({ value: connector.id, label: connector.type }))}
+            />
           </Field>
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" onClick={() => setResourceModalOpen(false)} disabled={formSubmitting}>
@@ -560,6 +542,76 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <span>{label}</span>
       {children}
     </label>
+  );
+}
+
+type Option = { label: string; value: string };
+
+function FancySelect({
+  value,
+  onChange,
+  options,
+  placeholder = 'Select an option',
+  name,
+  required,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: Option[];
+  placeholder?: string;
+  name?: string;
+  required?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(event: MouseEvent) {
+      if (!wrapperRef.current) return;
+      if (!wrapperRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const selected = options.find((opt) => opt.value === value);
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      <input className="sr-only" tabIndex={-1} name={name} value={value} readOnly required={required} />
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex w-full items-center justify-between rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-parchment transition hover:border-white/30 focus:border-sand/40 focus:outline-none"
+      >
+        <span className={selected ? '' : 'text-fog/70'}>{selected?.label ?? placeholder}</span>
+        <ChevronDown className="h-4 w-4 text-fog" />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-20 mt-2 w-full rounded-2xl border border-white/10 bg-[#121212]/95 p-1 shadow-2xl backdrop-blur">
+          {options.map((opt) => {
+            const isActive = opt.value === value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value);
+                  setOpen(false);
+                }}
+                className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${
+                  isActive ? 'bg-sand text-ink' : 'text-parchment hover:bg-white/10'
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
