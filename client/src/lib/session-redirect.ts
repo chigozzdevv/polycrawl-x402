@@ -1,6 +1,15 @@
 import { api } from '@/services/api'
 
-function getSessionEndpoint() {
+function getSessionEndpoint(returnTo?: string) {
+  const canonical = 'https://api.polycrawl.com'
+  if (returnTo) {
+    try {
+      const u = new URL(returnTo)
+      if (u.origin === canonical || u.host === 'api.polycrawl.com') {
+        return `${canonical}/auth/session`
+      }
+    } catch {}
+  }
   const envBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '')
   if (envBase) return `${envBase}/auth/session`
 
@@ -22,7 +31,7 @@ export function redirectThroughSession(returnTo: string) {
 
   const form = document.createElement('form')
   form.method = 'POST'
-  form.action = getSessionEndpoint()
+  form.action = getSessionEndpoint(returnTo)
   form.style.display = 'none'
 
   const tokenInput = document.createElement('input')
