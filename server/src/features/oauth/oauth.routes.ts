@@ -143,11 +143,13 @@ export async function registerOAuthRoutes(app: FastifyInstance) {
       const resource = body.resource || env.OAUTH_RESOURCE || `${baseUrl}/mcp`;
       try {
         if (body.grant_type === 'authorization_code') {
-          if (!body.code || !body.redirect_uri || !body.code_verifier || !body.client_id) {
+          if (!body.code || !body.redirect_uri || !body.code_verifier) {
             return sendAuthError(reply, 'invalid_request', 'Missing parameters');
           }
-          const client = await ensureClientExists(body.client_id);
-          assertClientSecret(client, body.client_secret);
+          if (body.client_id) {
+            const client = await ensureClientExists(body.client_id);
+            assertClientSecret(client, body.client_secret);
+          }
           const tokens = await issueTokensFromCode(body.code, body.redirect_uri, body.code_verifier, resource);
           reply.header('Cache-Control', 'no-store');
           return reply.send({
