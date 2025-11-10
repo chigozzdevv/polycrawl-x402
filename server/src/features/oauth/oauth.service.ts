@@ -105,9 +105,7 @@ export function getProtectedResourceMetadataUrls(baseUrl: string) {
 }
 
 function getAuthorizationServerUrls(baseUrl: string) {
-  const suffix = getResourcePathSuffix();
-  const base = `${baseUrl}/.well-known/oauth-authorization-server`;
-  return suffix ? [base, `${base}${suffix}`] : [base];
+  return [baseUrl];
 }
 
 async function getSigningKey() {
