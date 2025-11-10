@@ -144,6 +144,13 @@ export async function registerOAuthRoutes(app: FastifyInstance) {
     schema: { body: tokenBody },
     handler: async (req, reply) => {
       const body = tokenBody.parse(req.body);
+      console.log('[OAUTH TOKEN] Request body:', {
+        grant_type: body.grant_type,
+        code: body.code?.substring(0, 10) + '...',
+        redirect_uri: body.redirect_uri,
+        code_verifier_length: body.code_verifier?.length,
+        client_id: body.client_id?.substring(0, 10) + '...',
+      });
       const baseUrl = getBaseUrl(req);
       const env = loadEnv();
       const resource = body.resource || env.OAUTH_RESOURCE || `${baseUrl}/mcp`;

@@ -210,9 +210,19 @@ export async function createAuthorizationCode(input: AuthorizationInput) {
 }
 
 export async function issueTokensFromCode(code: string, redirectUri: string | undefined, codeVerifier: string, resource?: string) {
+  console.log('[TOKEN EXCHANGE] Starting token exchange for code:', code.substring(0, 10) + '...');
+  console.log('[TOKEN EXCHANGE] redirect_uri:', redirectUri);
+  console.log('[TOKEN EXCHANGE] code_verifier length:', codeVerifier?.length);
   const codeDoc = await consumeAuthorizationCode(code);
-  if (!codeDoc) throw new Error('invalid_grant_code');
+  console.log('[TOKEN EXCHANGE] codeDoc found:', !!codeDoc);
+  if (!codeDoc) {
+    console.error('[TOKEN EXCHANGE] Code not found or already consumed!');
+    throw new Error('invalid_grant_code');
+  }
+  console.log('[TOKEN EXCHANGE] codeDoc.redirect_uri:', codeDoc.redirect_uri);
+  console.log('[TOKEN EXCHANGE] codeDoc.code_challenge:', codeDoc.code_challenge);
   if (redirectUri && codeDoc.redirect_uri !== redirectUri) {
+    console.error('[TOKEN EXCHANGE] Redirect URI mismatch! Expected:', codeDoc.redirect_uri, 'Got:', redirectUri);
     await deleteAuthorizationCode(code);
     throw new Error('invalid_grant_redirect_uri');
   }

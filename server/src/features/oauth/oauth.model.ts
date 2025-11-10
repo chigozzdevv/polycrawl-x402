@@ -76,13 +76,22 @@ export async function insertAuthorizationCode(doc: AuthorizationCodeDoc) {
 }
 
 export async function consumeAuthorizationCode(code: string) {
+  console.log('[CONSUME CODE] Attempting to consume code:', code);
   const db = await getDb();
   const coll = db.collection<AuthorizationCodeDoc>('oauth_authorization_codes');
+  const existingDoc = await coll.findOne({ _id: code } as any);
+  console.log('[CONSUME CODE] Code exists in DB:', !!existingDoc);
+  if (existingDoc) {
+    console.log('[CONSUME CODE] Code consumed status:', existingDoc.consumed);
+    console.log('[CONSUME CODE] Code expires_at:', existingDoc.expires_at);
+  }
+
   const result = await coll.findOneAndUpdate(
     { _id: code, consumed: { $ne: true } } as any,
     { $set: { consumed: true } },
     { returnDocument: 'after' }
   );
+  console.log('[CONSUME CODE] Update result:', !!result, 'value:', !!(result as any)?.value);
   return (result as any)?.value || null;
 }
 
