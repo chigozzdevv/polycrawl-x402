@@ -4,7 +4,6 @@ import {
   PublicKey,
   TransactionMessage,
   VersionedTransaction,
-  TransactionInstruction,
 } from '@solana/web3.js';
 import { getOrCreateAssociatedTokenAccount, getMint, createTransferCheckedInstruction } from '@solana/spl-token';
 import { loadEnv } from '@/config/env.js';
@@ -70,13 +69,6 @@ export async function createCustodialX402Payment(
     mintInfo.decimals,
   );
 
-  const memoText = `x402:${requirements.resource}`;
-  const memoInstruction = new TransactionInstruction({
-    programId: new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'),
-    keys: [],
-    data: Buffer.from(memoText, 'utf8'),
-  });
-
   const { blockhash } = await conn.getLatestBlockhash('confirmed');
   const feePayer = requirements.extra?.feePayer;
   const feePayerPubkey = feePayer ? new PublicKey(feePayer) : userKeypair.publicKey;
@@ -84,7 +76,7 @@ export async function createCustodialX402Payment(
   const messageV0 = new TransactionMessage({
     payerKey: feePayerPubkey,
     recentBlockhash: blockhash,
-    instructions: [transferInstruction, memoInstruction],
+    instructions: [transferInstruction],
   }).compileToV0Message();
 
   const versionedTx = new VersionedTransaction(messageV0);
