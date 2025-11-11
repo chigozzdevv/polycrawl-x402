@@ -16,7 +16,6 @@ export async function createCustodialX402Payment(
   userId: string,
   requirements: X402PaymentRequirements
 ): Promise<{ x402Version: number; kind: any; signedTransaction: string; extra?: any }> {
-  const env = loadEnv();
   const conn = getConnection();
 
   const walletKey = await findWalletKey(userId, 'payer', 'solana');
@@ -28,6 +27,13 @@ export async function createCustodialX402Payment(
   const payTo = new PublicKey(requirements.payTo);
   const usdcMint = new PublicKey(requirements.asset);
   const amountAtomic = BigInt(requirements.maxAmountRequired);
+
+  console.log('[X402 Custodial] User wallet:', walletKey.public_key);
+  console.log('[X402 Custodial] Payment details:', {
+    to: payTo.toBase58(),
+    mint: usdcMint.toBase58(),
+    amount: amountAtomic.toString(),
+  });
 
   const fromAta = await getOrCreateAssociatedTokenAccount(
     conn,
@@ -73,7 +79,7 @@ export async function createCustodialX402Payment(
   });
   const signedTransaction = Buffer.from(serialized).toString('base64');
 
-  return {
+  const payload = {
     x402Version: 1,
     kind: {
       scheme: requirements.scheme,
@@ -82,4 +88,14 @@ export async function createCustodialX402Payment(
     signedTransaction,
     extra: requirements.extra,
   };
+
+  console.log('[X402 Custodial] Created payment:', {
+    from: userKeypair.publicKey.toBase58(),
+    to: payTo.toBase58(),
+    amount: amountAtomic.toString(),
+    hasFeePayer: !!feePayer,
+    txLength: serialized.length,
+  });
+
+  return payload;
 }

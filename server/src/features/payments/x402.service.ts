@@ -117,17 +117,26 @@ export async function verifyX402Payload(payload: any, reqs: X402PaymentRequireme
   const { X402_FACILITATOR_URL } = loadEnv();
   if (!X402_FACILITATOR_URL) throw new Error('X402_FACILITATOR_URL not configured');
 
+  const body = { x402Version: payload?.x402Version ?? 1, paymentPayload: payload, paymentRequirements: reqs };
+  console.log('[X402] Verifying with facilitator:', X402_FACILITATOR_URL + '/verify');
+  console.log('[X402] Payload keys:', Object.keys(payload || {}));
+  console.log('[X402] Requirements:', JSON.stringify(reqs, null, 2));
+
   const res = await fetch(X402_FACILITATOR_URL + '/verify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ x402Version: payload?.x402Version ?? 1, paymentPayload: payload, paymentRequirements: reqs }),
+    body: JSON.stringify(body),
   });
 
+  console.log('[X402] Facilitator response status:', res.status);
   if (!res.ok) {
     const error = await res.text().catch(() => 'Unknown error');
+    console.log('[X402] Facilitator error response:', error);
     throw new Error(`X402 verify failed: ${error}`);
   }
-  return (await res.json()) as { isValid: boolean; invalidReason?: string; payer?: string };
+  const result = (await res.json()) as { isValid: boolean; invalidReason?: string; payer?: string };
+  console.log('[X402] Facilitator result:', result);
+  return result;
 }
 
 // Broadcasts settlement after successful verification; facilitator returns network/tx information.

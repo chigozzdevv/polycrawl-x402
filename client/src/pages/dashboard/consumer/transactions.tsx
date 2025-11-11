@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { api } from '@/services/api';
 import type { Receipt } from '@/services/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Receipt as ReceiptIcon, TrendingDown, DollarSign, Calendar } from 'lucide-react';
+import { Receipt as ReceiptIcon, TrendingDown, DollarSign, Calendar, ExternalLink } from 'lucide-react';
 
 export function TransactionsPage() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
@@ -225,9 +225,20 @@ export function TransactionsPage() {
                       <div className="text-parchment font-medium">
                         {formatCurrency(receipt.json?.paid_total || 0)}
                       </div>
-                      <div className="text-xs text-fog mt-1">
-                        ID: {receipt._id.slice(0, 8)}...
-                      </div>
+                      {receipt.json?.x402_tx ? (
+                        <a
+                          href={`https://explorer.solana.com/tx/${receipt.json.x402_tx}?cluster=devnet`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-end gap-1 text-xs text-sand hover:text-parchment transition-colors mt-1"
+                        >
+                          View Tx <ExternalLink className="w-3 h-3" />
+                        </a>
+                      ) : (
+                        <div className="text-xs text-fog mt-1">
+                          ID: {receipt._id.slice(0, 8)}...
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
