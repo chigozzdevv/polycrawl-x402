@@ -34,11 +34,13 @@ export async function fetchController(req: FastifyRequest, reply: FastifyReply) 
     if (!out.pendingReceipt) return reply.code(500).send({ error: 'SETTLEMENT_STATE_MISSING' });
     try {
       const res = await settleX402Payload(x402.payload, x402.requirements);
+      req.log.info({ requestId: out.pendingReceipt.requestId, success: !!res.success, txHash: res.txHash, networkId: res.networkId, error: res.error }, 'x402_settlement_result');
       const header = Buffer.from(JSON.stringify({ success: !!res.success, txHash: res.txHash, networkId: res.networkId, error: res.error || undefined })).toString('base64');
       reply.header('X-PAYMENT-RESPONSE', header);
       const receipt = await finalizeExternalReceipt(out.pendingReceipt, { x402Tx: res.txHash ?? null });
       return reply.send({ content: out.content, receipt });
     } catch (err) {
+      req.log.warn({ requestId: out.pendingReceipt.requestId, err: String((err as any)?.message || err) }, 'x402_settlement_failed');
       await markRequestSettlementFailed(out.pendingReceipt.requestId, 'SETTLEMENT_FAILED');
       return reply.code(402).send({ x402Version: x402.payload?.x402Version ?? 1, error: 'SETTLEMENT_FAILED' });
     }

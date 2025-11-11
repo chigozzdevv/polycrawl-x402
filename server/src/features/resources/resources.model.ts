@@ -33,13 +33,29 @@ export async function findResourceById(id: string) {
 
 export async function searchResourcesByQuery(query: string, opts?: { format?: string[] }) {
   const db = await getDb();
-  const match: any = {
-    $or: [
-      { title: { $regex: query, $options: 'i' } },
-      { summary: { $regex: query, $options: 'i' } },
-      { tags: { $in: [new RegExp(query, 'i')] } },
-    ],
-  };
+  const tokens = Array.from(new Set(String(query).split(/[^a-zA-Z0-9]+/).filter(t => t.length > 1))).slice(0, 6);
+  const andClauses = tokens.length > 0
+    ? tokens.map(t => ({
+        $or: [
+          { title: { $regex: t, $options: 'i' } },
+          { summary: { $regex: t, $options: 'i' } },
+          { sample_preview: { $regex: t, $options: 'i' } },
+          { domain: { $regex: t, $options: 'i' } },
+          { tags: { $in: [new RegExp(t, 'i')] } },
+        ],
+      }))
+    : [
+        {
+          $or: [
+            { title: { $regex: query, $options: 'i' } },
+            { summary: { $regex: query, $options: 'i' } },
+            { sample_preview: { $regex: query, $options: 'i' } },
+            { domain: { $regex: query, $options: 'i' } },
+            { tags: { $in: [new RegExp(query, 'i')] } },
+          ],
+        },
+      ];
+  const match: any = { $and: andClauses };
   if (opts?.format?.length) match.format = { $in: opts.format };
   const cursor = db.collection<ResourceDoc>('resources').find(match).limit(10);
   const list = await cursor.toArray();

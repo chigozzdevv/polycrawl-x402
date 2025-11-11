@@ -44,6 +44,7 @@ export async function requireX402ForMcpFetch(req: FastifyRequest, reply: Fastify
   const unitPrice = (resource as any).price_per_kb ?? 0;
   const estBytes = (resource as any).size_bytes ?? Math.min(fetchArgs.constraints?.maxBytes ?? 256 * 1024, 10 * 1024 * 1024);
   const estCost = sameOwner ? 0 : (isFlat ? (resource as any).price_flat! : Number(((unitPrice * (estBytes / 1024))).toFixed(6)));
+  req.log.info({ resourceId: fetchArgs.resourceId, sameOwner, estBytes, estCost }, 'x402_estimate');
 
   if (estCost <= 0) return;
 
@@ -85,6 +86,7 @@ export async function requireX402ForMcpFetch(req: FastifyRequest, reply: Fastify
       asset: usdcMint,
       extra: { feePayer },
     };
+    req.log.info({ network, payTo, asset: usdcMint, feePayer, maxAmountRequired: requirements.maxAmountRequired }, 'x402_requirements');
 
     let payload: any;
     const paymentHeader = req.headers['x-payment'];
@@ -94,6 +96,7 @@ export async function requireX402ForMcpFetch(req: FastifyRequest, reply: Fastify
         const json = Buffer.from(paymentHeader, 'base64').toString('utf-8');
         payload = JSON.parse(json);
         if (typeof payload.x402Version !== 'number') payload.x402Version = 1;
+        req.log.info({ hasPayment: true, kind: payload?.kind }, 'x402_payment_received');
       } catch (e) {
         return reply.code(402).send({ x402Version: 1, error: 'MALFORMED_X_PAYMENT', accepts: [requirements] });
       }
@@ -104,6 +107,7 @@ export async function requireX402ForMcpFetch(req: FastifyRequest, reply: Fastify
 
       try {
         payload = await createCustodialX402Payment(oauth.userId, requirements);
+        req.log.info({ createdCustodial: true }, 'x402_payment_created');
       } catch (err: any) {
         return reply.code(500).send({ error: 'PAYMENT_CREATION_FAILED', detail: String(err?.message) });
       }
@@ -111,10 +115,12 @@ export async function requireX402ForMcpFetch(req: FastifyRequest, reply: Fastify
 
     try {
       const result = await verifyX402Payload(payload, requirements);
+      req.log.info({ isValid: result.isValid, invalidReason: result.invalidReason, payer: result.payer }, 'x402_verify_result');
       if (!result.isValid) {
         return reply.code(402).send({ x402Version: 1, error: result.invalidReason || 'PAYMENT_INVALID', accepts: [requirements], payer: result.payer });
       }
     } catch (err: any) {
+      req.log.warn({ err: String(err?.message || err) }, 'x402_verify_error');
       return reply.code(402).send({ x402Version: 1, error: String(err?.message || 'VERIFY_FAILED'), accepts: [requirements] });
     }
 

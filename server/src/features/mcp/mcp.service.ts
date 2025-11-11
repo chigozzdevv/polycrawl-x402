@@ -77,14 +77,23 @@ export async function discoverService(params: { query: string; filters?: { forma
 }
 
 function computeRelevanceScore(query: string, resource: any): number {
-  const q = query.toLowerCase();
-  let score = 0;
-
-  if (resource.title?.toLowerCase().includes(q)) score += 0.5;
-  if (resource.summary?.toLowerCase().includes(q)) score += 0.3;
-  if (resource.tags?.some((t: string) => t.toLowerCase().includes(q))) score += 0.2;
-
-  return Math.min(score, 1.0);
+  const tokens = Array.from(new Set(String(query).toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length > 1))).slice(0, 6);
+  if (tokens.length === 0) return 0;
+  let matchScore = 0;
+  const title = String(resource.title || '').toLowerCase();
+  const summary = String(resource.summary || '').toLowerCase();
+  const sample = String((resource as any).sample_preview || '').toLowerCase();
+  const tags: string[] = Array.isArray(resource.tags) ? resource.tags.map((x: any) => String(x).toLowerCase()) : [];
+  for (const t of tokens) {
+    let tokenScore = 0;
+    if (title.includes(t)) tokenScore = Math.max(tokenScore, 1.0);
+    if (summary.includes(t)) tokenScore = Math.max(tokenScore, 0.6);
+    if (sample.includes(t)) tokenScore = Math.max(tokenScore, 0.6);
+    if (tags.some(tag => tag.includes(t))) tokenScore = Math.max(tokenScore, 0.7);
+    matchScore += tokenScore;
+  }
+  const normalized = Math.min(1, matchScore / tokens.length);
+  return normalized;
 }
 
 // fetch content via connector, compute final cost, settle (internal or x402), then optionally pay provider on-chain and issue a signed receipt.
