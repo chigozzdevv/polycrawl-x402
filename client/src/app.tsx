@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { LandingPage } from '@/pages/landing'
 import { AuthPage } from '@/pages/auth'
+import { GetStartedPage } from '@/pages/landing/get-started'
 import { Dashboard } from '@/pages/dashboard'
 import { AuthProvider, useAuth } from '@/context/auth-context'
 import { redirectThroughSession } from '@/lib/session-redirect'
@@ -89,6 +90,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={hashAuth ? <AuthPage /> : <LandingPage />} />
       <Route path="/auth" element={<AuthScreen />} />
+      <Route path="/get-started" element={<GetStartedPage />} />
       <Route path="/app/*" element={<ProtectedRoute />} />
       <Route path="*" element={<Navigate to={isAuthenticated ? '/app' : '/'} replace />} />
     </Routes>

@@ -23,7 +23,7 @@ export function Hero() {
       <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
         <Button
           className="group h-11 gap-2 bg-[#cfbea0] px-6 text-black hover:bg-[#cfbea0] hover:text-black"
-          onClick={() => window.location.hash = '#auth'}
+          onClick={() => { window.location.href = '/get-started' }}
         >
           Start a Crawl <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1 group-hover:scale-110" />
         </Button>

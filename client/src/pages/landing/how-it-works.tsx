@@ -9,7 +9,7 @@ const agentSteps = [
     description: (
       <>
         AI agents discover resources using Model Context Protocol at{' '}
-        <span className="font-medium text-sand">polycrawl.com/mcp</span> with OAuth 2.0 authentication
+        <a href="https://api.polycrawl.com/mcp" target="_blank" rel="noopener noreferrer" className="font-medium text-sand underline">https://api.polycrawl.com/mcp</a> with OAuth 2.0 authentication
       </>
     ),
   },

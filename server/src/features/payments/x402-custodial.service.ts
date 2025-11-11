@@ -1,4 +1,10 @@
-import { Connection, Keypair, PublicKey, Transaction } from '@solana/web3.js';
+import {
+  Connection,
+  Keypair,
+  PublicKey,
+  TransactionMessage,
+  VersionedTransaction,
+} from '@solana/web3.js';
 import { getOrCreateAssociatedTokenAccount, createTransferInstruction } from '@solana/spl-token';
 import { loadEnv } from '@/config/env.js';
 import { findWalletKey } from '@/features/wallets/keys.model.js';
@@ -49,34 +55,30 @@ export async function createCustodialX402Payment(
     payTo
   );
 
-  const tx = new Transaction();
-  tx.add(
-    createTransferInstruction(
-      fromAta.address,
-      toAta.address,
-      userKeypair.publicKey,
-      amountAtomic,
-      [],
-      undefined
-    )
+  const transferInstruction = createTransferInstruction(
+    fromAta.address,
+    toAta.address,
+    userKeypair.publicKey,
+    amountAtomic,
+    [],
+    undefined
   );
 
   const { blockhash } = await conn.getLatestBlockhash('confirmed');
-  tx.recentBlockhash = blockhash;
-
   const feePayer = requirements.extra?.feePayer;
-  if (feePayer) {
-    tx.feePayer = new PublicKey(feePayer);
-    tx.partialSign(userKeypair);
-  } else {
-    tx.feePayer = userKeypair.publicKey;
-    tx.sign(userKeypair);
-  }
+  const feePayerPubkey = feePayer ? new PublicKey(feePayer) : userKeypair.publicKey;
 
-  const serialized = tx.serialize({
-    requireAllSignatures: !feePayer,
-    verifySignatures: false
-  });
+  const messageV0 = new TransactionMessage({
+    payerKey: feePayerPubkey,
+    recentBlockhash: blockhash,
+    instructions: [transferInstruction],
+  }).compileToV0Message();
+
+  const versionedTx = new VersionedTransaction(messageV0);
+
+  versionedTx.sign([userKeypair]);
+
+  const serialized = versionedTx.serialize();
   const signedTransaction = Buffer.from(serialized).toString('base64');
 
   const payload = {
