@@ -34,26 +34,36 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
     },
     async (args: DiscoverInput, extra) => {
       try {
+        console.log('[MCP Tool] discover_resources called with args:', JSON.stringify(args));
         const context = getSessionContext(extra?.sessionId);
+        console.log('[MCP Tool] Session context:', context ? 'found' : 'missing');
+
         if (!context) {
+          console.error('[MCP Tool] OAuth context missing');
           return {
             isError: true,
             structuredContent: { error: 'OAUTH_REQUIRED' },
             content: [{ type: 'text', text: 'OAuth authentication required. Please authenticate to use this tool.' }],
           };
         }
+
+        console.log('[MCP Tool] Calling discoverService with userId:', context.userId);
         const out = await discoverService({
           query: args.query,
           filters: args.filters,
           userId: context.userId,
           agentId: context.agentId
         });
+
+        console.log('[MCP Tool] discoverService returned', out.results.length, 'results');
         return {
           structuredContent: out,
           content: [{ type: 'text', text: JSON.stringify(out, null, 2) }],
         };
       } catch (err: any) {
         const msg = typeof err?.message === 'string' ? err.message : String(err);
+        console.error('[MCP Tool] discover_resources error:', err);
+        console.error('[MCP Tool] Error stack:', err?.stack);
         return {
           isError: true,
           structuredContent: { error: 'DISCOVERY_FAILED', detail: msg },
@@ -72,25 +82,32 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
       outputSchema: fetchResultShape,
     },
     async (args: FetchInput, extra) => {
-      const { resourceId, mode, constraints } = args;
-      if (!resourceId) {
-        return {
-          isError: true,
-          structuredContent: { error: 'RESOURCE_ID_REQUIRED', detail: 'fetch_content currently requires resourceId' },
-          content: [{ type: 'text', text: 'Resource ID is required to fetch content.' }],
-        };
-      }
-
-      const context = getSessionContext(extra?.sessionId);
-      if (!context) {
-        return {
-          isError: true,
-          structuredContent: { error: 'OAUTH_REQUIRED' },
-          content: [{ type: 'text', text: 'OAuth authentication required. Please authenticate to use this tool.' }],
-        };
-      }
-
       try {
+        console.log('[MCP Tool] fetch_content called with args:', JSON.stringify(args));
+        const { resourceId, mode, constraints } = args;
+
+        if (!resourceId) {
+          console.error('[MCP Tool] Resource ID missing');
+          return {
+            isError: true,
+            structuredContent: { error: 'RESOURCE_ID_REQUIRED', detail: 'fetch_content currently requires resourceId' },
+            content: [{ type: 'text', text: 'Resource ID is required to fetch content.' }],
+          };
+        }
+
+        const context = getSessionContext(extra?.sessionId);
+        console.log('[MCP Tool] Session context:', context ? 'found' : 'missing');
+
+        if (!context) {
+          console.error('[MCP Tool] OAuth context missing');
+          return {
+            isError: true,
+            structuredContent: { error: 'OAUTH_REQUIRED' },
+            content: [{ type: 'text', text: 'OAuth authentication required. Please authenticate to use this tool.' }],
+          };
+        }
+
+        console.log('[MCP Tool] Calling fetchService with resourceId:', resourceId);
         const out = await fetchService({
           userId: context.userId,
           clientId: context.clientId,
@@ -101,6 +118,7 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
         });
 
         if (out.status !== 200) {
+          console.error('[MCP Tool] fetchService returned error:', out.status, out.error);
           const payload = { error: out.error, quote: (out as any).quote };
           return {
             isError: true,
@@ -109,6 +127,7 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
           };
         }
 
+        console.log('[MCP Tool] fetchService succeeded');
         const payload = { content: out.content, receipt: out.receipt };
         return {
           structuredContent: payload,
@@ -116,6 +135,8 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
         };
       } catch (err: any) {
         const msg = typeof err?.message === 'string' ? err.message : String(err);
+        console.error('[MCP Tool] fetch_content error:', err);
+        console.error('[MCP Tool] Error stack:', err?.stack);
         return {
           isError: true,
           structuredContent: { error: 'FETCH_FAILED', detail: msg },
