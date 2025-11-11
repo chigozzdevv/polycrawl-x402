@@ -1,7 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { randomUUID } from 'node:crypto';
-import { discoverService, fetchService } from '@/features/mcp/mcp.service.js';
+import { discoverService, fetchService, finalizeExternalReceipt, markRequestSettlementFailed } from '@/features/mcp/mcp.service.js';
+import { settleX402Payload } from '@/features/payments/x402.service.js';
 import {
   discoverInput,
   discoverResult,
@@ -129,7 +130,10 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
           };
         }
 
+        const x402 = (context as any)?._x402;
+        console.log('[MCP Tool] X402 context:', x402 ? 'present' : 'missing');
         console.log('[MCP Tool] Calling fetchService with resourceId:', resourceId);
+
         const out = await fetchService({
           userId: context.userId,
           clientId: context.clientId,
@@ -137,7 +141,7 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
           resourceId,
           mode,
           constraints,
-        });
+        }, { settlementMode: x402 ? 'external' : 'internal' });
 
         if (out.status !== 200) {
           console.error('[MCP Tool] fetchService returned error:', out.status, out.error);
@@ -147,6 +151,24 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
             structuredContent: payload,
             content: [{ type: 'text', text: `Fetch failed: ${out.error}${(out as any).quote ? ` (estimated cost: ${(out as any).quote})` : ''}` }],
           };
+        }
+
+        if (x402 && out.pendingReceipt) {
+          console.log('[MCP Tool] Settling via X402 facilitator');
+          try {
+            const res = await settleX402Payload(x402.payload, x402.requirements);
+            console.log('[MCP Tool] X402 settlement result:', res);
+            const receipt = await finalizeExternalReceipt(out.pendingReceipt, { x402Tx: res.txHash ?? null });
+            out.receipt = receipt;
+          } catch (err) {
+            console.error('[MCP Tool] X402 settlement failed:', err);
+            await markRequestSettlementFailed(out.pendingReceipt.requestId, 'SETTLEMENT_FAILED');
+            return {
+              isError: true,
+              structuredContent: { error: 'SETTLEMENT_FAILED', detail: String(err) },
+              content: [{ type: 'text', text: `X402 settlement failed: ${err}` }],
+            };
+          }
         }
 
         console.log('[MCP Tool] fetchService succeeded');

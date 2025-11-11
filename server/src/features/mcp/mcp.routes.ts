@@ -23,14 +23,22 @@ export async function registerMcpRoutes(app: FastifyInstance) {
         app.log.error({ err }, 'tap_mock_failed');
         return reply.code(502).send({ error: 'TAP_VERIFICATION_FAILED', message: 'Unable to demonstrate TAP locally. Please retry.' });
       }
+
+      const body = (req as any).body;
+      if (body?.method === 'tools/call' && body?.params?.name === 'fetch_content') {
+        await requireX402ForMcpFetch(req, reply);
+        if (reply.sent) return;
+      }
+
       reply.hijack();
       try {
         const oauth = (req as any).oauth;
+        const x402 = (req as any)._x402;
         const incomingSession = req.headers['mcp-session-id'];
         if (oauth && typeof incomingSession === 'string') {
           setSessionContext(incomingSession, oauth);
         }
-        const context = oauth;
+        const context = { ...oauth, _x402: x402 };
         await runWithRequestContext(context, async () => {
           await runtime.transport.handleRequest(req.raw, reply.raw, (req as any).body);
         });

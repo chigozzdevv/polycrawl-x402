@@ -19,13 +19,21 @@ function usdToAtomic(amountUsd: number, decimals = 6) {
 
 // Enforces x402 for MCP fetch: advertises requirements via 402, verifies X-PAYMENT when present, and attaches context for settlement
 export async function requireX402ForMcpFetch(req: FastifyRequest, reply: FastifyReply) {
-  const parsed = fetchInput.safeParse(req.body);
-  if (!parsed.success) return reply.code(400).send({ error: 'BAD_REQUEST' });
-  const body = parsed.data;
-  if (!body.resourceId) return;
+  const rawBody = req.body as any;
+  let fetchArgs: any;
+
+  if (rawBody?.method === 'tools/call' && rawBody?.params?.name === 'fetch_content') {
+    fetchArgs = rawBody.params.arguments;
+  } else {
+    const parsed = fetchInput.safeParse(rawBody);
+    if (!parsed.success) return reply.code(400).send({ error: 'BAD_REQUEST' });
+    fetchArgs = parsed.data;
+  }
+
+  if (!fetchArgs?.resourceId) return;
 
   const oauth = (req as any).oauth as { userId: string } | undefined;
-  const resource = await getResourceById(body.resourceId);
+  const resource = await getResourceById(fetchArgs.resourceId);
   if (!resource) return;
   const provider = await findProviderById(resource.provider_id);
   if (!provider) return reply.code(500).send({ error: 'PROVIDER_NOT_FOUND' });
@@ -33,7 +41,7 @@ export async function requireX402ForMcpFetch(req: FastifyRequest, reply: Fastify
   const sameOwner = oauth && provider.user_id === oauth.userId;
   const isFlat = typeof resource.price_flat === 'number' && (resource as any).price_flat > 0;
   const unitPrice = (resource as any).price_per_kb ?? 0;
-  const estBytes = (resource as any).size_bytes ?? Math.min(body.constraints?.maxBytes ?? 256 * 1024, 10 * 1024 * 1024);
+  const estBytes = (resource as any).size_bytes ?? Math.min(fetchArgs.constraints?.maxBytes ?? 256 * 1024, 10 * 1024 * 1024);
   const estCost = sameOwner ? 0 : (isFlat ? (resource as any).price_flat! : Number(((unitPrice * (estBytes / 1024))).toFixed(6)));
 
   if (estCost <= 0) return;

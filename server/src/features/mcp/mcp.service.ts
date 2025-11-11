@@ -177,14 +177,31 @@ export async function fetchService(
       if (!connector) throw new Error('CONNECTOR_NOT_FOUND');
       const fetched = await fetchViaConnector(resource as any, connector);
       if (fetched.kind === 'internal') {
-        content = { url: signCloudinaryUrl(resource.storage_ref!) };
+        const signedUrl = signCloudinaryUrl(resource.storage_ref!);
+        if (bytesBilled <= 10 * 1024 * 1024) {
+          const response = await fetch(signedUrl);
+          if (!response.ok) throw new Error(`Failed to fetch content: ${response.statusText}`);
+          const buffer = await response.arrayBuffer();
+          bytesBilled = buffer.byteLength;
+          content = { chunks: [Buffer.from(buffer).toString('base64')] };
+        } else {
+          content = { url: signedUrl };
+        }
       } else {
-        // We bill based on actual bytes; minimal payload returned for large bodies to avoid memory bloat
         bytesBilled = fetched.bytes;
         content = { chunks: [Buffer.from(fetched.body).toString('base64')] };
       }
     } else if (resource.storage_ref) {
-      content = { url: signCloudinaryUrl(resource.storage_ref) };
+      const signedUrl = signCloudinaryUrl(resource.storage_ref);
+      if (bytesBilled <= 10 * 1024 * 1024) {
+        const response = await fetch(signedUrl);
+        if (!response.ok) throw new Error(`Failed to fetch content: ${response.statusText}`);
+        const buffer = await response.arrayBuffer();
+        bytesBilled = buffer.byteLength;
+        content = { chunks: [Buffer.from(buffer).toString('base64')] };
+      } else {
+        content = { url: signedUrl };
+      }
     } else {
       if (holdId) await releaseHold(holdId);
       return { status: 501 as const, error: 'NO_CONNECTOR' };
