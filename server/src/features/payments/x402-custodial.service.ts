@@ -44,6 +44,7 @@ export async function createCustodialX402Payment(
   const mintAccountInfo = await conn.getAccountInfo(usdcMint, 'confirmed');
   if (!mintAccountInfo) throw new Error('USDC_MINT_NOT_FOUND');
   const tokenProgramId = mintAccountInfo.owner;
+  console.log('[X402 Custodial] Mint owner (token program):', tokenProgramId.toBase58());
 
   const fromAta = getAssociatedTokenAddressSync(
     usdcMint,
@@ -58,8 +59,13 @@ export async function createCustodialX402Payment(
     true,
     tokenProgramId,
   );
+  console.log('[X402 Custodial] ATAs:', {
+    fromAta: fromAta.toBase58(),
+    toAta: toAta.toBase58(),
+  });
 
   const mintInfo = await getMint(conn, usdcMint, 'confirmed', tokenProgramId);
+  console.log('[X402 Custodial] Mint decimals:', mintInfo.decimals);
 
   const transferInstruction = createTransferCheckedInstruction(
     fromAta,
@@ -71,6 +77,7 @@ export async function createCustodialX402Payment(
     undefined,
     tokenProgramId,
   );
+  console.log('[X402 Custodial] Built transferChecked instruction with program:', tokenProgramId.toBase58());
 
   const { blockhash } = await conn.getLatestBlockhash('confirmed');
   const feePayer = requirements.extra?.feePayer;
@@ -81,6 +88,12 @@ export async function createCustodialX402Payment(
     recentBlockhash: blockhash,
     instructions: [transferInstruction],
   }).compileToV0Message();
+  // Best-effort introspection of compiled message shape
+  try {
+    const ixCount = (messageV0 as any).compiledInstructions?.length ?? 0;
+    const altCount = (messageV0 as any).addressTableLookups?.length ?? 0;
+    console.log('[X402 Custodial] Message compiled:', { ixCount, altCount });
+  } catch {}
 
   const versionedTx = new VersionedTransaction(messageV0);
 
@@ -105,6 +118,7 @@ export async function createCustodialX402Payment(
     amount: amountAtomic.toString(),
     hasFeePayer: !!feePayer,
     txLength: serialized.length,
+    tokenProgram: tokenProgramId.toBase58(),
   });
 
   return result;
