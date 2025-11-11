@@ -119,13 +119,13 @@ export async function requireX402ForMcpFetch(req: FastifyRequest, reply: Fastify
       if (!result.isValid) {
         return reply.code(402).send({ x402Version: 1, error: result.invalidReason || 'PAYMENT_INVALID', accepts: [requirements], payer: result.payer });
       }
+      (req as any)._x402 = { payload, requirements, payer: result.payer };
+      return;
     } catch (err: any) {
       req.log.warn({ err: String(err?.message || err) }, 'x402_verify_error');
       return reply.code(402).send({ x402Version: 1, error: String(err?.message || 'VERIFY_FAILED'), accepts: [requirements] });
     }
 
-    (req as any)._x402 = { payload, requirements };
-    return;
   }
 
   return reply.code(500).send({ error: 'UNSUPPORTED_NETWORK' });

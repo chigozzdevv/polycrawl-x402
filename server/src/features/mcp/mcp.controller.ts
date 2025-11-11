@@ -16,7 +16,7 @@ export async function fetchController(req: FastifyRequest, reply: FastifyReply) 
   const oauth = (req as any).oauth as { userId: string; clientId: string; scopes: string[]; resource: string; agentId?: string };
   if (!oauth) return reply.code(401).send({ error: 'OAUTH_REQUIRED' });
 
-  const x402 = (req as any)._x402 as { payload: any; requirements: any } | undefined;
+  const x402 = (req as any)._x402 as { payload: any; requirements: any; payer?: string } | undefined;
   const tapDigest = (req as any)._tapDigest as string | undefined;
 
   const out = await fetchService({
@@ -35,7 +35,14 @@ export async function fetchController(req: FastifyRequest, reply: FastifyReply) 
     try {
       const res = await settleX402Payload(x402.payload, x402.requirements);
       req.log.info({ requestId: out.pendingReceipt.requestId, success: !!res.success, txHash: res.txHash, networkId: res.networkId, error: res.error }, 'x402_settlement_result');
-      const header = Buffer.from(JSON.stringify({ success: !!res.success, txHash: res.txHash, networkId: res.networkId, error: res.error || undefined })).toString('base64');
+      const responsePayload = {
+        success: !!res.success,
+        errorReason: res.error || undefined,
+        transaction: res.txHash ?? '',
+        network: res.networkId || x402.requirements?.network,
+        payer: x402.payer || undefined,
+      };
+      const header = Buffer.from(JSON.stringify(responsePayload)).toString('base64');
       reply.header('X-PAYMENT-RESPONSE', header);
       const receipt = await finalizeExternalReceipt(out.pendingReceipt, { x402Tx: res.txHash ?? null });
       return reply.send({ content: out.content, receipt });

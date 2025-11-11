@@ -45,23 +45,25 @@ export async function createCustodialX402Payment(
     conn,
     userKeypair,
     usdcMint,
-    userKeypair.publicKey
+    userKeypair.publicKey,
+    undefined,
+    'confirmed'
   );
 
   const toAta = await getOrCreateAssociatedTokenAccount(
     conn,
     userKeypair,
     usdcMint,
-    payTo
+    payTo,
+    undefined,
+    'confirmed'
   );
 
   const transferInstruction = createTransferInstruction(
     fromAta.address,
     toAta.address,
     userKeypair.publicKey,
-    amountAtomic,
-    [],
-    undefined
+    amountAtomic
   );
 
   const { blockhash } = await conn.getLatestBlockhash('confirmed');
