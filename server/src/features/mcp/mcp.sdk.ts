@@ -56,6 +56,28 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
         });
 
         console.log('[MCP Tool] discoverService returned', out.results.length, 'results');
+        console.log('[MCP Tool] Full output structure:', JSON.stringify(out, null, 2));
+
+        // Log each field type to help debug validation issues
+        if (out.results.length > 0) {
+          const first = out.results[0];
+          console.log('[MCP Tool] First result field types:', {
+            resourceId: typeof first.resourceId,
+            title: typeof first.title,
+            type: typeof first.type,
+            format: typeof first.format,
+            domain: typeof first.domain,
+            updatedAt: typeof first.updatedAt,
+            summary: typeof first.summary,
+            tags: typeof first.tags,
+            priceEstimate: typeof first.priceEstimate,
+            avgSizeKb: typeof first.avgSizeKb,
+            samplePreview: typeof first.samplePreview,
+            relevanceScore: typeof first.relevanceScore,
+            latencyMs: typeof first.latencyMs,
+          });
+        }
+
         return {
           structuredContent: out,
           content: [{ type: 'text', text: JSON.stringify(out, null, 2) }],
