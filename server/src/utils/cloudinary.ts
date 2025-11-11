@@ -19,7 +19,9 @@ export function getCloudinary() {
   return cloudinary;
 }
 
-export function signCloudinaryUrl(publicId: string) {
+export function signCloudinaryUrl(publicId: string, opts?: { expiresInSeconds?: number }) {
   const c = getCloudinary();
-  return c.url(publicId, { sign_url: true, resource_type: 'raw' });
+  const exp = typeof opts?.expiresInSeconds === 'number' ? opts!.expiresInSeconds : 120;
+  const expiresAt = Math.floor(Date.now() / 1000) + exp;
+  return c.url(publicId, { sign_url: true, resource_type: 'raw', type: 'authenticated', expires_at: expiresAt });
 }

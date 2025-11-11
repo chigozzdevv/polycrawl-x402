@@ -52,6 +52,7 @@ export const receiptSchema = z.object({
   userId: z.string(),
   agentId: z.string(),
   mode: z.enum(['raw', 'summary']),
+  requested_mode: z.enum(['raw', 'summary']).optional(),
   bytes_billed: z.number(),
   unit_price: z.number().optional(),
   flat_price: z.number().optional(),

@@ -107,9 +107,19 @@ export async function fetchService(
   const resource = await getResourceById(resourceId);
   if (!resource) return { status: 404 as const, error: 'RESOURCE_NOT_FOUND' };
 
-  // Policy enforcement (modes + visibility allowlist)
+  // Policy enforcement (modes + visibility allowlist) with summary→raw fallback
   const modes = (resource.modes || resource.policy?.modes) as any;
-  if (modes && !modes.includes(mode)) return { status: 403 as const, error: 'MODE_NOT_ALLOWED' };
+  const requestedMode = mode;
+  let effectiveMode: 'raw' | 'summary' = requestedMode;
+  if (requestedMode === 'summary' && modes && !modes.includes('summary')) {
+    if (!modes || modes.includes('raw')) {
+      effectiveMode = 'raw';
+    } else {
+      return { status: 403 as const, error: 'MODE_NOT_ALLOWED' };
+    }
+  } else if (requestedMode === 'raw' && modes && !modes.includes('raw')) {
+    return { status: 403 as const, error: 'MODE_NOT_ALLOWED' };
+  }
   const visibility = (resource.policy?.visibility || resource.visibility) as any;
   if (visibility === 'restricted') {
     const allow = resource.policy?.allow || [];
@@ -124,7 +134,7 @@ export async function fetchService(
     user_id: activeAgent.user_id,
     agent_id: activeAgent._id,
     resource_id: resourceId,
-    mode,
+    mode: effectiveMode,
     status: 'initiated',
     ts: new Date().toISOString(),
   } as any);
@@ -143,7 +153,7 @@ export async function fetchService(
   const estCost = sameOwner ? 0 : (isFlat ? resource.price_flat! : Number(((unitPrice * (estBytes / 1024))).toFixed(6)));
 
   if (estCost > 0 && !sameOwner) {
-    const capCheck = await checkSpendingCaps(activeAgent.user_id, resourceId, mode, estCost);
+    const capCheck = await checkSpendingCaps(activeAgent.user_id, resourceId, effectiveMode, estCost);
     if (!capCheck.allowed) {
       return {
         status: 402 as const,
@@ -169,39 +179,71 @@ export async function fetchService(
 
   try {
     let content: any = '';
-    let bytesBilled = resource.size_bytes ?? estBytes;
+    let bytesBilled = 0;
 
-    // Retrieve content either via connector (stream/binary) or signed URL to stored asset
+    const CHUNK_SIZE = 256 * 1024;
+    const splitToBase64 = (buf: Uint8Array): string[] => {
+      const out: string[] = [];
+      for (let i = 0; i < buf.length; i += CHUNK_SIZE) {
+        out.push(Buffer.from(buf.slice(i, i + CHUNK_SIZE)).toString('base64'));
+      }
+      return out;
+    };
+
+    const fetchAsChunks = async (url: string): Promise<{ chunks: string[]; bytes: number }> => {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Failed to fetch content: ${response.statusText}`);
+      const stream: ReadableStream<Uint8Array> | null = (response as any).body ?? null;
+      if (!stream) {
+        const ab = await response.arrayBuffer();
+        const u8 = new Uint8Array(ab);
+        return { chunks: splitToBase64(u8), bytes: u8.byteLength };
+      }
+      const reader = (stream as ReadableStream<Uint8Array>).getReader();
+      let carry = new Uint8Array(0);
+      const out: string[] = [];
+      let total = 0;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (value && value.length) {
+          total += value.length;
+          const merged = new Uint8Array(carry.length + value.length);
+          merged.set(carry, 0);
+          merged.set(value, carry.length);
+          let offset = 0;
+          while (merged.length - offset >= CHUNK_SIZE) {
+            const part = merged.slice(offset, offset + CHUNK_SIZE);
+            out.push(Buffer.from(part).toString('base64'));
+            offset += CHUNK_SIZE;
+          }
+          carry = merged.slice(offset);
+        }
+      }
+      if (carry.length) out.push(Buffer.from(carry).toString('base64'));
+      return { chunks: out, bytes: total };
+    };
+
+    // Retrieve content either via connector or internal storage; always return chunks
     if (resource.connector_id) {
       const connector = await findConnectorById(resource.connector_id);
       if (!connector) throw new Error('CONNECTOR_NOT_FOUND');
       const fetched = await fetchViaConnector(resource as any, connector);
       if (fetched.kind === 'internal') {
         const signedUrl = signCloudinaryUrl(resource.storage_ref!);
-        if (bytesBilled <= 10 * 1024 * 1024) {
-          const response = await fetch(signedUrl);
-          if (!response.ok) throw new Error(`Failed to fetch content: ${response.statusText}`);
-          const buffer = await response.arrayBuffer();
-          bytesBilled = buffer.byteLength;
-          content = { chunks: [Buffer.from(buffer).toString('base64')] };
-        } else {
-          content = { url: signedUrl };
-        }
+        const res = await fetchAsChunks(signedUrl);
+        bytesBilled = res.bytes;
+        content = { chunks: res.chunks };
       } else {
         bytesBilled = fetched.bytes;
-        content = { chunks: [Buffer.from(fetched.body).toString('base64')] };
+        content = { chunks: splitToBase64(fetched.body) };
       }
     } else if (resource.storage_ref) {
       const signedUrl = signCloudinaryUrl(resource.storage_ref);
-      if (bytesBilled <= 10 * 1024 * 1024) {
-        const response = await fetch(signedUrl);
-        if (!response.ok) throw new Error(`Failed to fetch content: ${response.statusText}`);
-        const buffer = await response.arrayBuffer();
-        bytesBilled = buffer.byteLength;
-        content = { chunks: [Buffer.from(buffer).toString('base64')] };
-      } else {
-        content = { url: signedUrl };
-      }
+      const res = await fetchAsChunks(signedUrl);
+      bytesBilled = res.bytes;
+      content = { chunks: res.chunks };
     } else {
       if (holdId) await releaseHold(holdId);
       return { status: 501 as const, error: 'NO_CONNECTOR' };
@@ -238,7 +280,8 @@ export async function fetchService(
       providerId: resource.provider_id,
       userId: activeAgent.user_id,
       agentId: activeAgent._id,
-      mode,
+      mode: effectiveMode,
+      requested_mode: requestedMode,
       bytes_billed: bytesBilled,
       unit_price: sameOwner ? undefined : (isFlat ? undefined : unitPrice),
       flat_price: sameOwner ? undefined : (isFlat ? finalCost : undefined),
