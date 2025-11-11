@@ -17,6 +17,7 @@ export async function fetchController(req: FastifyRequest, reply: FastifyReply) 
   if (!oauth) return reply.code(401).send({ error: 'OAUTH_REQUIRED' });
 
   const x402 = (req as any)._x402 as { payload: any; requirements: any } | undefined;
+  const tapDigest = (req as any)._tapDigest as string | undefined;
 
   const out = await fetchService({
     userId: oauth.userId,
@@ -25,7 +26,7 @@ export async function fetchController(req: FastifyRequest, reply: FastifyReply) 
     mode: body.mode,
     constraints: body.constraints,
     agentId: oauth.agentId,
-  }, { settlementMode: x402 ? 'external' : 'internal' });
+  }, { settlementMode: x402 ? 'external' : 'internal', tapDigest });
   if (out.status !== 200) return reply.code(out.status).send({ error: out.error, quote: (out as any).quote });
 
   // If X402 present, settle and attach response header

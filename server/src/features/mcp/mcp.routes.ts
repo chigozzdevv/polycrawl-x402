@@ -7,6 +7,7 @@ import { createMcpRuntime } from '@/features/mcp/mcp.sdk.js';
 import { runWithRequestContext, setSessionContext } from '@/services/oauth/session-store.js';
 import { requireX402ForMcpFetch } from '@/middleware/x402.js';
 import { verifyTapMock } from '@/features/tap/tap-forwarder.js';
+import { computeTapDigestFromRequest } from '@/features/tap/tap.digest.js';
 
 export async function registerMcpRoutes(app: FastifyInstance) {
   const runtime = await createMcpRuntime();
@@ -30,15 +31,23 @@ export async function registerMcpRoutes(app: FastifyInstance) {
         if (reply.sent) return;
       }
 
+      // Capture TAP digest if signature headers are present
+      try {
+        const digest = computeTapDigestFromRequest(req);
+        if (digest) (req as any)._tapDigest = digest;
+      } catch (e) {
+        app.log.warn({ err: e }, 'tap_digest_compute_failed');
+      }
+
       reply.hijack();
       try {
         const oauth = (req as any).oauth;
         const x402 = (req as any)._x402;
         const incomingSession = req.headers['mcp-session-id'];
         if (oauth && typeof incomingSession === 'string') {
-          setSessionContext(incomingSession, oauth);
+          setSessionContext(incomingSession, { ...oauth, tapDigest: (req as any)._tapDigest });
         }
-        const context = { ...oauth, _x402: x402 };
+        const context = { ...oauth, _x402: x402, tapDigest: (req as any)._tapDigest } as any;
         await runWithRequestContext(context, async () => {
           await runtime.transport.handleRequest(req.raw, reply.raw, (req as any).body);
         });
@@ -68,6 +77,12 @@ export async function registerMcpRoutes(app: FastifyInstance) {
   r.post('/tools/fetch_content', {
     preHandler: [requireOAuth, requireX402ForMcpFetch],
     schema: { body: fetchInput, response: { 200: fetchResult } },
-    handler: fetchController,
+    handler: async (req, reply) => {
+      try {
+        const digest = computeTapDigestFromRequest(req);
+        if (digest) (req as any)._tapDigest = digest;
+      } catch {}
+      return fetchController(req, reply);
+    },
   });
 }

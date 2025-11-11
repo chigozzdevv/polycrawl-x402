@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { fetchInput } from '@/features/mcp/mcp.schema.js';
 import { getResourceById } from '@/features/mcp/mcp.model.js';
 import { verifyX402Payload, type X402PaymentRequirements, getSupportedKinds } from '@/features/payments/x402.service.js';
+import { createCustodialX402Payment } from '@/features/payments/x402-custodial.service.js';
 import { loadEnv } from '@/config/env.js';
 import { findProviderById } from '@/features/providers/providers.model.js';
 
@@ -84,21 +85,30 @@ export async function requireX402ForMcpFetch(req: FastifyRequest, reply: Fastify
       asset: usdcMint,
       extra: { feePayer },
     };
-    
-    const paymentHeader = req.headers['x-payment'];
-    if (!paymentHeader || typeof paymentHeader !== 'string') {
-      return reply.code(402).send({ x402Version: 1, error: 'X-PAYMENT header is required', accepts: [requirements] });
-    }
-  
+
     let payload: any;
-    try {
-      const json = Buffer.from(paymentHeader, 'base64').toString('utf-8');
-      payload = JSON.parse(json);
-      if (typeof payload.x402Version !== 'number') payload.x402Version = 1;
-    } catch (e) {
-      return reply.code(402).send({ x402Version: 1, error: 'MALFORMED_X_PAYMENT', accepts: [requirements] });
+    const paymentHeader = req.headers['x-payment'];
+
+    if (paymentHeader && typeof paymentHeader === 'string') {
+      try {
+        const json = Buffer.from(paymentHeader, 'base64').toString('utf-8');
+        payload = JSON.parse(json);
+        if (typeof payload.x402Version !== 'number') payload.x402Version = 1;
+      } catch (e) {
+        return reply.code(402).send({ x402Version: 1, error: 'MALFORMED_X_PAYMENT', accepts: [requirements] });
+      }
+    } else {
+      if (!oauth?.userId) {
+        return reply.code(401).send({ error: 'UNAUTHORIZED' });
+      }
+
+      try {
+        payload = await createCustodialX402Payment(oauth.userId, requirements);
+      } catch (err: any) {
+        return reply.code(500).send({ error: 'PAYMENT_CREATION_FAILED', detail: String(err?.message) });
+      }
     }
-  
+
     try {
       const result = await verifyX402Payload(payload, requirements);
       if (!result.isValid) {
@@ -107,7 +117,7 @@ export async function requireX402ForMcpFetch(req: FastifyRequest, reply: Fastify
     } catch (err: any) {
       return reply.code(402).send({ x402Version: 1, error: String(err?.message || 'VERIFY_FAILED'), accepts: [requirements] });
     }
-  
+
     (req as any)._x402 = { payload, requirements };
     return;
   }

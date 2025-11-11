@@ -6,6 +6,7 @@ export type OAuthSessionContext = {
   scopes: string[];
   resource: string;
   agentId?: string;
+  tapDigest?: string;
 };
 
 const sessionMap = new Map<string, OAuthSessionContext>();

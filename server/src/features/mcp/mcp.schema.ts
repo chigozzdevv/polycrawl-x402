@@ -59,6 +59,7 @@ export const receiptSchema = z.object({
   splits: z.array(z.object({ to: z.string(), amount: z.number() })),
   policy_version: z.string().optional(),
   x402_tx: z.string().optional(),
+  provider_onchain_tx: z.string().optional(),
   tap_digest: z.string().optional(),
   ts: z.string(),
   sig: z.string(),

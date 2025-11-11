@@ -154,7 +154,15 @@ export interface SearchStats {
 export interface Receipt {
   _id: string;
   request_id: string;
-  json: any;
+  json: {
+    paid_total?: number;
+    resource?: { title?: string };
+    mode?: string;
+    bytes_billed?: number;
+    x402_tx?: string;
+    provider_onchain_tx?: string;
+    [key: string]: any;
+  };
   ed25519_sig: string;
   ts: string;
 }

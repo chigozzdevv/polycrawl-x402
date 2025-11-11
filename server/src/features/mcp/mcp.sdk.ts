@@ -141,7 +141,7 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
           resourceId,
           mode,
           constraints,
-        }, { settlementMode: x402 ? 'external' : 'internal' });
+        }, { settlementMode: x402 ? 'external' : 'internal', tapDigest: (context as any)?.tapDigest });
 
         if (out.status !== 200) {
           console.error('[MCP Tool] fetchService returned error:', out.status, out.error);

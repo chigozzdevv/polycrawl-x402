@@ -90,7 +90,7 @@ function computeRelevanceScore(query: string, resource: any): number {
 // fetch content via connector, compute final cost, settle (internal or x402), then optionally pay provider on-chain and issue a signed receipt.
 export async function fetchService(
   params: { userId: string; clientId: string; agentId?: string; resourceId: string; mode: 'raw' | 'summary'; constraints?: { maxCost?: number; maxBytes?: number } },
-  opts?: { settlementMode?: 'internal' | 'external' }
+  opts?: { settlementMode?: 'internal' | 'external'; tapDigest?: string }
 ) {
   const { userId, clientId, agentId, resourceId, mode, constraints } = params;
   const db = await getDb();
@@ -257,6 +257,7 @@ export async function fetchService(
         : [],
       x402_tx: undefined,
       provider_onchain_tx: providerSettlementTx,
+      tap_digest: opts?.tapDigest,
     };
 
     if (settlementMode === 'external') {

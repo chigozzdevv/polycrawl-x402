@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
 import { api } from '@/services/api'
 import type { Receipt } from '@/services/api'
+import { ExternalLink } from 'lucide-react'
 
 export function ReceiptsPage() {
   const [receipts, setReceipts] = useState<Receipt[]>([])
@@ -51,7 +52,35 @@ export function ReceiptsPage() {
                 </div>
                 <p className="mt-2 text-parchment">Request {receipt.request_id}</p>
                 <p>Paid Total: {receipt.json?.paid_total ?? 0} USDC</p>
-                <p className="truncate text-xs text-fog/70">Sig: {receipt.ed25519_sig}</p>
+                {receipt.json?.x402_tx && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-xs text-fog/70">X402 Tx:</span>
+                    <a
+                      href={`https://explorer.solana.com/tx/${receipt.json.x402_tx}?cluster=devnet`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs text-sand hover:text-parchment transition-colors"
+                    >
+                      {receipt.json.x402_tx.slice(0, 8)}...{receipt.json.x402_tx.slice(-6)}
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                )}
+                {receipt.json?.provider_onchain_tx && (
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="text-xs text-fog/70">Provider Tx:</span>
+                    <a
+                      href={`https://explorer.solana.com/tx/${receipt.json.provider_onchain_tx}?cluster=devnet`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs text-sand hover:text-parchment transition-colors"
+                    >
+                      {receipt.json.provider_onchain_tx.slice(0, 8)}...{receipt.json.provider_onchain_tx.slice(-6)}
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                )}
+                <p className="mt-2 truncate text-xs text-fog/70">Sig: {receipt.ed25519_sig}</p>
               </motion.div>
             ))}
           </div>
