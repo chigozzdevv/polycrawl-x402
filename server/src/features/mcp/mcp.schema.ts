@@ -26,6 +26,7 @@ const discoverResultSchema = z.object({
       samplePreview: z.string().nullish(),
       relevanceScore: z.number().nullish(),
       latencyMs: z.number().nullish(),
+      score: z.number().nullish(),
     })
   ),
   recommended: z.string().nullish(),
