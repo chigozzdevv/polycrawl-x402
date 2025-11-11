@@ -4,8 +4,10 @@ import {
   PublicKey,
   TransactionMessage,
   VersionedTransaction,
+  TransactionInstruction,
+  ComputeBudgetProgram,
 } from '@solana/web3.js';
-import { getOrCreateAssociatedTokenAccount, createTransferInstruction } from '@solana/spl-token';
+import { getOrCreateAssociatedTokenAccount, getMint, createTransferCheckedInstruction } from '@solana/spl-token';
 import { loadEnv } from '@/config/env.js';
 import { findWalletKey } from '@/features/wallets/keys.model.js';
 import { decryptSecret } from '@/services/crypto/keystore.js';
@@ -58,13 +60,23 @@ export async function createCustodialX402Payment(
     undefined,
     'confirmed'
   );
+  const mintInfo = await getMint(conn, usdcMint, 'confirmed');
 
-  const transferInstruction = createTransferInstruction(
+  const transferInstruction = createTransferCheckedInstruction(
     fromAta.address,
+    usdcMint,
     toAta.address,
     userKeypair.publicKey,
-    amountAtomic
+    amountAtomic,
+    mintInfo.decimals,
   );
+
+  const memoText = `x402:${requirements.resource}`;
+  const memoInstruction = new TransactionInstruction({
+    programId: new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'),
+    keys: [],
+    data: Buffer.from(memoText, 'utf8'),
+  });
 
   const { blockhash } = await conn.getLatestBlockhash('confirmed');
   const feePayer = requirements.extra?.feePayer;
@@ -73,7 +85,11 @@ export async function createCustodialX402Payment(
   const messageV0 = new TransactionMessage({
     payerKey: feePayerPubkey,
     recentBlockhash: blockhash,
-    instructions: [transferInstruction],
+    instructions: [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+      transferInstruction,
+      memoInstruction,
+    ],
   }).compileToV0Message();
 
   const versionedTx = new VersionedTransaction(messageV0);
