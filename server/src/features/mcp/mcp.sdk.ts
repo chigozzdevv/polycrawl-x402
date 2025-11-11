@@ -2,7 +2,14 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { randomUUID } from 'node:crypto';
 import { discoverService, fetchService } from '@/features/mcp/mcp.service.js';
-import { discoverInput, discoverResult, fetchInput, fetchResult, type DiscoverInput, type FetchInput } from '@/features/mcp/mcp.schema.js';
+import {
+  discoverInputShape,
+  discoverResultShape,
+  fetchInputShape,
+  fetchResultShape,
+  type DiscoverInput,
+  type FetchInput,
+} from '@/features/mcp/mcp.schema.js';
 import { getSessionContext, setSessionContext, clearSessionContext } from '@/services/oauth/session-store.js';
 
 export type McpRuntime = {
@@ -22,8 +29,8 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
     {
       title: 'Discover provider resources',
       description: 'Search Polycrawl catalog for provider resources that match a query',
-      inputSchema: discoverInput,
-      outputSchema: discoverResult,
+      inputSchema: discoverInputShape,
+      outputSchema: discoverResultShape,
     } as any,
     (async (args: DiscoverInput, extra: any) => {
       const context = getSessionContext(extra?.sessionId);
@@ -47,8 +54,8 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
     {
       title: 'Fetch provider content',
       description: 'Retrieve metered content from a provider resource with settlement',
-      inputSchema: fetchInput,
-      outputSchema: fetchResult,
+      inputSchema: fetchInputShape,
+      outputSchema: fetchResultShape,
     } as any,
     (async (args: FetchInput, extra: any) => {
       const { resourceId, mode, constraints } = args;

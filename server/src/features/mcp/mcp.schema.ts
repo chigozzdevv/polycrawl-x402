@@ -1,14 +1,16 @@
 import { z } from 'zod';
 
-export const discoverInput = z.object({
+const discoverInputSchema = z.object({
   query: z.string().min(2),
   mode: z.enum(['raw', 'summary']).default('raw'),
   filters: z
     .object({ format: z.array(z.string()).optional(), maxCost: z.number().positive().optional(), freshness: z.string().optional() })
     .optional(),
 });
+export const discoverInput = discoverInputSchema;
+export const discoverInputShape = discoverInputSchema.shape;
 
-export const discoverResult = z.object({
+const discoverResultSchema = z.object({
   results: z.array(
     z.object({
       resourceId: z.string(),
@@ -28,17 +30,19 @@ export const discoverResult = z.object({
   ),
   recommended: z.string().optional(),
 });
+export const discoverResult = discoverResultSchema;
+export const discoverResultShape = discoverResultSchema.shape;
 
-export const fetchInput = z
-  .object({
-    resourceId: z.string().optional(),
-    url: z.string().url().optional(),
-    mode: z.enum(['raw', 'summary']),
-    constraints: z
-      .object({ maxCost: z.number().positive().optional(), maxBytes: z.number().positive().optional() })
-      .optional(),
-  })
-  .refine((v) => !!(v.resourceId || v.url), { message: 'resourceId or url required' });
+const fetchInputSchema = z.object({
+  resourceId: z.string().optional(),
+  url: z.string().url().optional(),
+  mode: z.enum(['raw', 'summary']),
+  constraints: z
+    .object({ maxCost: z.number().positive().optional(), maxBytes: z.number().positive().optional() })
+    .optional(),
+});
+export const fetchInput = fetchInputSchema.refine((v) => !!(v.resourceId || v.url), { message: 'resourceId or url required' });
+export const fetchInputShape = fetchInputSchema.shape;
 
 export const receiptSchema = z.object({
   id: z.string(),
@@ -59,10 +63,12 @@ export const receiptSchema = z.object({
   sig: z.string(),
 });
 
-export const fetchResult = z.object({
+const fetchResultSchema = z.object({
   content: z.union([z.string(), z.object({ url: z.string().url() }), z.object({ chunks: z.array(z.string()) })]),
   receipt: receiptSchema,
 });
+export const fetchResult = fetchResultSchema;
+export const fetchResultShape = fetchResultSchema.shape;
 
 export type DiscoverInput = z.infer<typeof discoverInput>;
 export type DiscoverResult = z.infer<typeof discoverResult>;
