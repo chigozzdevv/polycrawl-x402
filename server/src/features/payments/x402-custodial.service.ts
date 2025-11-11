@@ -5,7 +5,7 @@ import {
   TransactionMessage,
   VersionedTransaction,
 } from '@solana/web3.js';
-import { getOrCreateAssociatedTokenAccount, getMint, createTransferCheckedInstruction } from '@solana/spl-token';
+import { getAssociatedTokenAddressSync, getMint, createTransferCheckedInstruction } from '@solana/spl-token';
 import { loadEnv } from '@/config/env.js';
 import { findWalletKey } from '@/features/wallets/keys.model.js';
 import { decryptSecret } from '@/services/crypto/keystore.js';
@@ -41,32 +41,35 @@ export async function createCustodialX402Payment(
     amount: amountAtomic.toString(),
   });
 
-  const fromAta = await getOrCreateAssociatedTokenAccount(
-    conn,
-    userKeypair,
+  const mintAccountInfo = await conn.getAccountInfo(usdcMint, 'confirmed');
+  if (!mintAccountInfo) throw new Error('USDC_MINT_NOT_FOUND');
+  const tokenProgramId = mintAccountInfo.owner;
+
+  const fromAta = getAssociatedTokenAddressSync(
     usdcMint,
     userKeypair.publicKey,
-    undefined,
-    'confirmed'
+    false,
+    tokenProgramId,
   );
 
-  const toAta = await getOrCreateAssociatedTokenAccount(
-    conn,
-    userKeypair,
+  const toAta = getAssociatedTokenAddressSync(
     usdcMint,
     payTo,
-    undefined,
-    'confirmed'
+    true,
+    tokenProgramId,
   );
-  const mintInfo = await getMint(conn, usdcMint, 'confirmed');
+
+  const mintInfo = await getMint(conn, usdcMint, 'confirmed', tokenProgramId);
 
   const transferInstruction = createTransferCheckedInstruction(
-    fromAta.address,
+    fromAta,
     usdcMint,
-    toAta.address,
+    toAta,
     userKeypair.publicKey,
     amountAtomic,
     mintInfo.decimals,
+    undefined,
+    tokenProgramId,
   );
 
   const { blockhash } = await conn.getLatestBlockhash('confirmed');
