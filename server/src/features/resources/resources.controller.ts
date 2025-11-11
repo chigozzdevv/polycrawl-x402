@@ -1,7 +1,7 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { getDb } from '@/config/db.js';
-import { createResourceInput } from '@/features/resources/resources.schema.js';
+import { createResourceInput, updateResourceInput } from '@/features/resources/resources.schema.js';
 import { listResourcesByProvider, createResourceForProvider, listPublicResources } from '@/features/resources/resources.service.js';
 import { findResourceById } from '@/features/resources/resources.model.js';
 
@@ -69,7 +69,7 @@ export async function updateResourceController(req: FastifyRequest, reply: Fasti
     return reply.code(403).send({ error: 'FORBIDDEN' });
   }
 
-  const body = createResourceInput.partial().parse(req.body);
+  const body = updateResourceInput.parse(req.body);
   const updateDoc: any = { ...body, updated_at: new Date().toISOString() };
 
   await db.collection('resources').updateOne({ _id: id } as any, { $set: updateDoc });

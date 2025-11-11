@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
-export const createResourceInput = z
-  .object({
+const createResourceBase = z.object({
   title: z.string().min(2),
   type: z.enum(['site', 'dataset', 'file']),
   format: z.string(),
@@ -20,11 +19,15 @@ export const createResourceInput = z
   sample_preview: z.string().optional(),
   allow_agent_ids: z.array(z.string()).optional(),
   deny_paths: z.array(z.string()).optional(),
-})
+});
+
+export const createResourceInput = createResourceBase
   .superRefine((val, ctx) => {
     if (val.type === 'site' && (!val.domain || val.domain.trim().length === 0)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'domain is required for site resources', path: ['domain'] });
     }
   });
+
+export const updateResourceInput = createResourceBase.partial();
 
 export const getResourceQuery = z.object({ id: z.string().min(1) });
