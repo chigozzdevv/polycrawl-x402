@@ -17,18 +17,18 @@ const discoverResultSchema = z.object({
       title: z.string(),
       type: z.string(),
       format: z.string(),
-      domain: z.string().optional(),
-      updatedAt: z.string().optional(),
-      summary: z.string().optional(),
-      tags: z.array(z.string()).optional(),
-      priceEstimate: z.number().optional(),
-      avgSizeKb: z.number().optional(),
-      samplePreview: z.string().optional(),
-      relevanceScore: z.number().optional(),
-      latencyMs: z.number().optional(),
+      domain: z.string().nullish(),
+      updatedAt: z.string().nullish(),
+      summary: z.string().nullish(),
+      tags: z.array(z.string()).nullish(),
+      priceEstimate: z.number().nullish(),
+      avgSizeKb: z.number().nullish(),
+      samplePreview: z.string().nullish(),
+      relevanceScore: z.number().nullish(),
+      latencyMs: z.number().nullish(),
     })
   ),
-  recommended: z.string().optional(),
+  recommended: z.string().nullish(),
 });
 export const discoverResult = discoverResultSchema;
 export const discoverResultShape = discoverResultSchema.shape;
