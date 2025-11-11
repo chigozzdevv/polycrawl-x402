@@ -2,8 +2,6 @@
 
  Polycrawl is an MCP‑native, pay‑per‑crawl platform that lets AI agents fetch permissioned, verified data and licensed content — with instant settlement and cryptographic receipts — powered by TAP message signatures and X402 payments on Solana USDC.
 
----
-
 ## Table of contents
 
 1) The problem we solve
@@ -238,7 +236,3 @@ npm run dev
 - TAP verification errors: provide `TAP_JWKS_URL` or set `TAP_PRIVATE_KEY_PATH` so a public key can be derived.
 - On‑chain payouts failing: ensure platform wallet has SOL for fees and USDC on devnet; verify `X402_PLATFORM_PRIVATE_KEY`.
 - Large assets return signed URLs; ensure Cloudinary credentials are set.
-
----
-
-This README reflects the live codebase. Add visuals (architecture and flow diagrams) to mirror the landing page narrative.
