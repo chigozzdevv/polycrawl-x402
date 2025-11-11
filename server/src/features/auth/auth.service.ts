@@ -51,7 +51,6 @@ export async function signupService(name: string, email: string, password: strin
   await insertUser({ _id: userId, name, email, password_hash: hash, roles: ['user'], created_at: new Date().toISOString() });
   await initUserWallets(userId);
   await getOrCreateProvider(userId);
-  fundAgentOnSignup(userId).catch(() => {});
   try {
     const auth = await buildAuthBundle(userId);
     return { ok: true as const, auth };
@@ -176,7 +175,6 @@ export async function walletLogin(address: string, chain: 'solana', signature: s
       created_at: new Date().toISOString(),
       last_verified_at: new Date().toISOString(),
     });
-    fundAgentOnSignup(userId).catch(() => {});
     await markChallengeUsed(ch._id);
     try {
       const auth = await buildAuthBundle(userId);

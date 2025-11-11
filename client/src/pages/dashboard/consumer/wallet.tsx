@@ -300,10 +300,9 @@ const MAX_REQUEST_AMOUNT = 5000;
 
           {depositTab === 'onchain' ? (
             <div className="space-y-4 text-sm text-fog">
-              <p>Send devnet USDC directly to your payer wallet. Balances update once Solana confirms (~1 min).</p>
               <div className="rounded-2xl border border-white/15 bg-[#121212] p-4">
                 <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.3em] text-fog/70">
-                  <span>Payer address</span>
+                  <span>Your Payer Wallet Address</span>
                   <button
                     onClick={() => handleCopy(payerWallet?.address)}
                     className="flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-parchment transition hover:bg-white/10"
@@ -314,9 +313,19 @@ const MAX_REQUEST_AMOUNT = 5000;
                 </div>
                 <p className="break-all font-mono text-base text-parchment">{payerWallet?.address || 'Address unavailable'}</p>
               </div>
-              <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 p-4 text-xs text-fog">
-                Use <code className="text-parchment">solana airdrop</code> for SOL fees, then move devnet USDC with <code className="text-parchment">spl-token transfer</code>.
+
+              <div className="rounded-2xl border border-sand/40 bg-sand/10 p-4 space-y-3">
+                <p className="text-sand font-medium">How to fund your wallet:</p>
+                <ol className="list-decimal list-inside space-y-2 text-xs text-sand/90">
+                  <li>Visit <a href="https://faucet.circle.com/" target="_blank" rel="noopener noreferrer" className="underline hover:text-sand">faucet.circle.com</a></li>
+                  <li>Select <strong>USDC</strong> and <strong>Solana Devnet</strong></li>
+                  <li>Paste your wallet address above</li>
+                  <li>Request tokens (10 USDC per hour)</li>
+                  <li>Get SOL for fees: <code className="text-sand bg-sand/20 px-1 rounded">solana airdrop 0.1 {payerWallet?.address?.slice(0, 8)}...</code></li>
+                </ol>
               </div>
+
+              <p className="text-xs text-fog/70">Once funded, you can start crawling data. Balances update after Solana confirmation (~1 min).</p>
             </div>
           ) : (
             <>
