@@ -39,7 +39,7 @@ export async function createSignedReceipt(payload: any) {
   const jwt = await new SignJWT(payload).setProtectedHeader({ alg: 'EdDSA', typ: 'JWT' }).setIssuedAt().setExpirationTime('10y').sign(key);
   const doc: ReceiptDoc = { _id: payload.id, request_id: payload.request_id || payload.id, json: payload, ed25519_sig: jwt, ts };
   await db.collection<ReceiptDoc>('receipts').insertOne(doc as any);
-  return { ...payload, sig: jwt };
+  return { ...payload, ts, sig: jwt };
 }
 
 export async function listRecentReceiptsByUserId(userId: string, limit = 5) {
