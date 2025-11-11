@@ -150,6 +150,29 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
         }
 
         console.log('[MCP Tool] fetchService succeeded');
+        console.log('[MCP Tool] Full fetch output structure:', JSON.stringify(out, null, 2));
+
+        if (out.receipt) {
+          console.log('[MCP Tool] Receipt field types:', {
+            id: typeof out.receipt.id,
+            resource: typeof out.receipt.resource,
+            providerId: typeof out.receipt.providerId,
+            userId: typeof out.receipt.userId,
+            agentId: typeof out.receipt.agentId,
+            mode: typeof out.receipt.mode,
+            bytes_billed: typeof out.receipt.bytes_billed,
+            unit_price: typeof out.receipt.unit_price,
+            flat_price: typeof out.receipt.flat_price,
+            paid_total: typeof out.receipt.paid_total,
+            splits: typeof out.receipt.splits,
+            policy_version: typeof out.receipt.policy_version,
+            x402_tx: typeof out.receipt.x402_tx,
+            tap_digest: typeof out.receipt.tap_digest,
+            ts: typeof out.receipt.ts,
+            sig: typeof out.receipt.sig,
+          });
+        }
+
         const payload = { content: out.content, receipt: out.receipt };
         return {
           structuredContent: payload,
