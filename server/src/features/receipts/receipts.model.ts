@@ -1,17 +1,32 @@
 import { SignJWT, importPKCS8 } from 'jose';
+import { readFile } from 'node:fs/promises';
 import { getDb } from '@/config/db.js';
 import { loadEnv } from '@/config/env.js';
 
 type ReceiptDoc = { _id: string; request_id: string; json: any; ed25519_sig: string; ts: string };
 type SigningKey = Awaited<ReturnType<typeof importPKCS8>>;
 
-// Lazily import the Ed25519 signing key once; used to bind a signed receipt to each fulfilled request
 let keyPromise: Promise<SigningKey> | null = null;
 async function getSigningKey() {
   if (!keyPromise) {
-    const { ED25519_PRIVATE_KEY } = process.env as any;
-    if (!ED25519_PRIVATE_KEY) throw new Error('ED25519_PRIVATE_KEY is required');
-    keyPromise = importPKCS8(ED25519_PRIVATE_KEY, 'EdDSA');
+    keyPromise = (async () => {
+      const { ED25519_PRIVATE_KEY, ED25519_PRIVATE_KEY_PATH } = process.env as any;
+
+      if (ED25519_PRIVATE_KEY) {
+        try {
+          return await importPKCS8(ED25519_PRIVATE_KEY, 'EdDSA');
+        } catch (err) {
+          console.warn('Failed to parse ED25519_PRIVATE_KEY, falling back to ED25519_PRIVATE_KEY_PATH');
+        }
+      }
+
+      if (ED25519_PRIVATE_KEY_PATH) {
+        const pem = await readFile(ED25519_PRIVATE_KEY_PATH, 'utf8');
+        return await importPKCS8(pem, 'EdDSA');
+      }
+
+      throw new Error('ED25519_PRIVATE_KEY or ED25519_PRIVATE_KEY_PATH is required');
+    })();
   }
   return keyPromise;
 }
