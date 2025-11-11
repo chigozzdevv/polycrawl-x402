@@ -3,8 +3,8 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { randomUUID } from 'node:crypto';
 import { discoverService, fetchService } from '@/features/mcp/mcp.service.js';
 import {
-  discoverInputShape,
-  discoverResultShape,
+  discoverInput,
+  discoverResult,
   fetchInputShape,
   fetchResultShape,
   type DiscoverInput,
@@ -29,24 +29,38 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
     {
       title: 'Discover provider resources',
       description: 'Search Polycrawl catalog for provider resources that match a query',
-      inputSchema: discoverInputShape,
-      outputSchema: discoverResultShape,
-    } as any,
-    (async (args: DiscoverInput, extra: any) => {
-      const context = getSessionContext(extra?.sessionId);
-      if (!context) {
+      inputSchema: discoverInput.shape,
+      outputSchema: discoverResult.shape,
+    },
+    async (args: DiscoverInput, extra) => {
+      try {
+        const context = getSessionContext(extra?.sessionId);
+        if (!context) {
+          return {
+            isError: true,
+            structuredContent: { error: 'OAUTH_REQUIRED' },
+            content: [{ type: 'text', text: 'OAuth authentication required. Please authenticate to use this tool.' }],
+          };
+        }
+        const out = await discoverService({
+          query: args.query,
+          filters: args.filters,
+          userId: context.userId,
+          agentId: context.agentId
+        });
+        return {
+          structuredContent: out,
+          content: [{ type: 'text', text: JSON.stringify(out, null, 2) }],
+        };
+      } catch (err: any) {
+        const msg = typeof err?.message === 'string' ? err.message : String(err);
         return {
           isError: true,
-          structuredContent: { error: 'OAUTH_REQUIRED' },
-          content: [{ type: 'text' as const, text: 'OAUTH_REQUIRED' }],
+          structuredContent: { error: 'DISCOVERY_FAILED', detail: msg },
+          content: [{ type: 'text', text: `Discovery failed: ${msg}` }],
         };
       }
-      const out = await discoverService({ query: args.query, filters: args.filters });
-      return {
-        structuredContent: out,
-        content: [{ type: 'text' as const, text: JSON.stringify(out) }],
-      };
-    }) as any
+    }
   );
 
   server.registerTool(
@@ -56,14 +70,14 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
       description: 'Retrieve metered content from a provider resource with settlement',
       inputSchema: fetchInputShape,
       outputSchema: fetchResultShape,
-    } as any,
-    (async (args: FetchInput, extra: any) => {
+    },
+    async (args: FetchInput, extra) => {
       const { resourceId, mode, constraints } = args;
       if (!resourceId) {
         return {
           isError: true,
           structuredContent: { error: 'RESOURCE_ID_REQUIRED', detail: 'fetch_content currently requires resourceId' },
-          content: [{ type: 'text' as const, text: 'RESOURCE_ID_REQUIRED' }],
+          content: [{ type: 'text', text: 'Resource ID is required to fetch content.' }],
         };
       }
 
@@ -72,46 +86,50 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
         return {
           isError: true,
           structuredContent: { error: 'OAUTH_REQUIRED' },
-          content: [{ type: 'text' as const, text: 'OAUTH_REQUIRED' }],
+          content: [{ type: 'text', text: 'OAuth authentication required. Please authenticate to use this tool.' }],
         };
       }
 
-      const out = await fetchService({
-        userId: context.userId,
-        clientId: context.clientId,
-        agentId: context.agentId,
-        resourceId,
-        mode,
-        constraints,
-      });
+      try {
+        const out = await fetchService({
+          userId: context.userId,
+          clientId: context.clientId,
+          agentId: context.agentId,
+          resourceId,
+          mode,
+          constraints,
+        });
 
-      if (out.status !== 200) {
-        const payload = { error: out.error, quote: (out as any).quote };
+        if (out.status !== 200) {
+          const payload = { error: out.error, quote: (out as any).quote };
+          return {
+            isError: true,
+            structuredContent: payload,
+            content: [{ type: 'text', text: `Fetch failed: ${out.error}${(out as any).quote ? ` (estimated cost: ${(out as any).quote})` : ''}` }],
+          };
+        }
+
+        const payload = { content: out.content, receipt: out.receipt };
+        return {
+          structuredContent: payload,
+          content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
+        };
+      } catch (err: any) {
+        const msg = typeof err?.message === 'string' ? err.message : String(err);
         return {
           isError: true,
-          structuredContent: payload,
-          content: [{ type: 'text' as const, text: JSON.stringify(payload) }],
+          structuredContent: { error: 'FETCH_FAILED', detail: msg },
+          content: [{ type: 'text', text: `Fetch failed: ${msg}` }],
         };
       }
-
-      const payload = { content: out.content, receipt: out.receipt };
-      return {
-        structuredContent: payload,
-        content: [{ type: 'text' as const, text: JSON.stringify(payload) }],
-      };
-    }) as any
+    }
   );
 
+  // Use stateless transport to maximize client compatibility (no Mcp-Session-Id required)
   const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => randomUUID(),
+    sessionIdGenerator: undefined,
     enableJsonResponse: true,
-    onsessioninitialized: (sessionId: string) => {
-      const ctx = getSessionContext();
-      if (ctx) setSessionContext(sessionId, ctx);
-    },
-    onsessionclosed: (sessionId: string) => {
-      clearSessionContext(sessionId);
-    },
+    // Session callbacks are unused in stateless mode; request-scoped context is set via runWithRequestContext
   });
 
   await server.connect(transport);
