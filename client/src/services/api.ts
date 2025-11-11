@@ -161,6 +161,7 @@ export interface Receipt {
     bytes_billed?: number;
     x402_tx?: string;
     provider_onchain_tx?: string;
+    tap_digest?: string;
     [key: string]: any;
   };
   ed25519_sig: string;

@@ -80,6 +80,14 @@ export function ReceiptsPage() {
                     </a>
                   </div>
                 )}
+                {receipt.json?.tap_digest && (
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="text-xs text-fog/70">TAP:</span>
+                    <span className="text-xs text-fog">
+                      {receipt.json.tap_digest.slice(0, 8)}...{receipt.json.tap_digest.slice(-6)}
+                    </span>
+                  </div>
+                )}
                 <p className="mt-2 truncate text-xs text-fog/70">Sig: {receipt.ed25519_sig}</p>
               </motion.div>
             ))}
