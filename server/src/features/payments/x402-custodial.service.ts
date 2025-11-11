@@ -5,7 +5,6 @@ import {
   TransactionMessage,
   VersionedTransaction,
   TransactionInstruction,
-  ComputeBudgetProgram,
 } from '@solana/web3.js';
 import { getOrCreateAssociatedTokenAccount, getMint, createTransferCheckedInstruction } from '@solana/spl-token';
 import { loadEnv } from '@/config/env.js';
@@ -85,11 +84,7 @@ export async function createCustodialX402Payment(
   const messageV0 = new TransactionMessage({
     payerKey: feePayerPubkey,
     recentBlockhash: blockhash,
-    instructions: [
-      ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
-      transferInstruction,
-      memoInstruction,
-    ],
+    instructions: [transferInstruction, memoInstruction],
   }).compileToV0Message();
 
   const versionedTx = new VersionedTransaction(messageV0);
