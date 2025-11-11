@@ -21,7 +21,7 @@ function getConnection(): Connection {
 export async function createCustodialX402Payment(
   userId: string,
   requirements: X402PaymentRequirements
-): Promise<{ x402Version: number; kind: any; signedTransaction: string; extra?: any }> {
+): Promise<{ x402Version: number; scheme: string; network: string; payload: { transaction: string }; extra?: any }> {
   const conn = getConnection();
 
   const walletKey = await findWalletKey(userId, 'payer', 'solana');
@@ -79,15 +79,15 @@ export async function createCustodialX402Payment(
   versionedTx.sign([userKeypair]);
 
   const serialized = versionedTx.serialize();
-  const signedTransaction = Buffer.from(serialized).toString('base64');
+  const transaction = Buffer.from(serialized).toString('base64');
 
-  const payload = {
+  const result = {
     x402Version: 1,
-    kind: {
-      scheme: requirements.scheme,
-      network: requirements.network,
+    scheme: requirements.scheme,
+    network: requirements.network,
+    payload: {
+      transaction,
     },
-    signedTransaction,
     extra: requirements.extra,
   };
 
@@ -99,5 +99,5 @@ export async function createCustodialX402Payment(
     txLength: serialized.length,
   });
 
-  return payload;
+  return result;
 }

@@ -96,7 +96,7 @@ export async function requireX402ForMcpFetch(req: FastifyRequest, reply: Fastify
         const json = Buffer.from(paymentHeader, 'base64').toString('utf-8');
         payload = JSON.parse(json);
         if (typeof payload.x402Version !== 'number') payload.x402Version = 1;
-        req.log.info({ hasPayment: true, kind: payload?.kind }, 'x402_payment_received');
+        req.log.info({ hasPayment: true, scheme: payload?.scheme, network: payload?.network }, 'x402_payment_received');
       } catch (e) {
         return reply.code(402).send({ x402Version: 1, error: 'MALFORMED_X_PAYMENT', accepts: [requirements] });
       }
