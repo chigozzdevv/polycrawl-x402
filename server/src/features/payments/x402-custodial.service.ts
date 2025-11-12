@@ -2,6 +2,7 @@ import {
   Connection,
   Keypair,
   PublicKey,
+  ComputeBudgetProgram,
   TransactionMessage,
   VersionedTransaction,
 } from '@solana/web3.js';
@@ -56,7 +57,7 @@ export async function createCustodialX402Payment(
   const toAta = getAssociatedTokenAddressSync(
     usdcMint,
     payTo,
-    true,
+    false,
     tokenProgramId,
   );
   console.log('[X402 Custodial] ATAs:', {
@@ -83,10 +84,14 @@ export async function createCustodialX402Payment(
   const feePayer = requirements.extra?.feePayer;
   const feePayerPubkey = feePayer ? new PublicKey(feePayer) : userKeypair.publicKey;
 
+  // Facilitator requires compute budget in positions 0 and 1
+  const computeLimitIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 7000 });
+  const computePriceIx = ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 });
+
   const messageV0 = new TransactionMessage({
     payerKey: feePayerPubkey,
     recentBlockhash: blockhash,
-    instructions: [transferInstruction],
+    instructions: [computeLimitIx, computePriceIx, transferInstruction],
   }).compileToV0Message();
   // Best-effort introspection of compiled message shape
   try {

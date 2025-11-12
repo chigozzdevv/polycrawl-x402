@@ -50,7 +50,7 @@ export function SiteHeader() {
           <Button
             variant="ghost"
             className="border border-white/12 px-4 transition-none hover:border-white/12 hover:bg-transparent"
-            onClick={() => window.location.hash = '#auth'}
+            onClick={() => window.location.href = '/auth'}
           >
             Sign in
           </Button>
@@ -86,7 +86,7 @@ export function SiteHeader() {
                 className="w-full border border-white/12 transition-none hover:border-white/12 hover:bg-transparent"
                 onClick={() => {
                   setMobileMenuOpen(false);
-                  window.location.hash = '#auth';
+                  window.location.href = '/auth';
                 }}
               >
                 Sign in
