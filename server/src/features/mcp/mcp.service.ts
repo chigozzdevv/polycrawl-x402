@@ -200,8 +200,10 @@ export async function fetchService(
     };
 
     const fetchAsChunks = async (url: string): Promise<{ chunks: string[]; bytes: number }> => {
+      console.log(`[Cloudinary] Fetching URL: ${url}`);
       const response = await fetch(url);
-      if (!response.ok) throw new Error(`Failed to fetch content: ${response.statusText}`);
+      console.log(`[Cloudinary] Response status: ${response.status} ${response.statusText}`);
+      if (!response.ok) throw new Error(`Failed to fetch content: ${response.status} ${response.statusText}`);
       const stream: ReadableStream<Uint8Array> | null = (response as any).body ?? null;
       if (!stream) {
         const ab = await response.arrayBuffer();
