@@ -19,12 +19,7 @@ export function getCloudinary() {
   return cloudinary;
 }
 
-function isHttpUrl(s: string): boolean {
-  return /^https?:\/\//i.test(s);
-}
-
 export function cloudinaryUrlUpload(publicId: string) {
-  if (isHttpUrl(publicId)) return publicId;
   const c = getCloudinary();
   return c.url(publicId, { resource_type: 'raw', type: 'upload', secure: true });
 }

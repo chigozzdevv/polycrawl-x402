@@ -85,11 +85,24 @@ export async function deleteResourceController(req: FastifyRequest, reply: Fasti
   const id = String((req.params as any).id);
   const db = await getDb();
 
-  // Verify ownership
   const existing = await db.collection('resources').findOne({ _id: id } as any);
   if (!existing) return reply.code(404).send({ error: 'RESOURCE_NOT_FOUND' });
   if ((existing as any).provider_id !== providerId) {
     return reply.code(403).send({ error: 'FORBIDDEN' });
+  }
+
+  if ((existing as any).storage_ref) {
+    try {
+      const { getCloudinary } = await import('@/utils/cloudinary.js');
+      const cloudinary = getCloudinary();
+      const storageRef = (existing as any).storage_ref;
+      const publicId = storageRef.startsWith('http')
+        ? storageRef.split('/upload/').pop()?.split('?')[0] || storageRef
+        : storageRef;
+      await cloudinary.uploader.destroy(publicId, { resource_type: 'raw', invalidate: true });
+    } catch (err) {
+      console.error('Failed to delete from Cloudinary:', err);
+    }
   }
 
   await db.collection('resources').deleteOne({ _id: id } as any);
