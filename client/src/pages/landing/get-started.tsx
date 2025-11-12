@@ -80,7 +80,7 @@ export function GetStartedPage() {
               <div className="flex-1">
                 <h3 className="text-xl font-medium">Step 2: Create an Account</h3>
                 <p className="mt-2 text-sm text-fog">
-                  Sign up to get your OAuth credentials and API keys for authenticated crawling
+                  Sign up to access the dashboard and monitor your crawling activities, fund your payer wallet, and manage resources
                 </p>
                 <div className="mt-4">
                   <Button
