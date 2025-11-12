@@ -299,33 +299,46 @@ const MAX_REQUEST_AMOUNT = 5000;
           </div>
 
           {depositTab === 'onchain' ? (
-            <div className="space-y-4 text-sm text-fog">
+            <div className="space-y-4">
+              <p className="text-sm text-parchment font-medium">Fund your wallet using Circle's USDC faucet</p>
+
               <div className="rounded-2xl border border-white/15 bg-[#121212] p-4">
-                <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.3em] text-fog/70">
-                  <span>Your Payer Wallet Address</span>
+                <div className="mb-3 text-xs uppercase tracking-wider text-fog/70">Your Payer Wallet Address</div>
+                <div className="flex items-center gap-2">
+                  <p className="flex-1 break-all font-mono text-sm text-parchment">{payerWallet?.address || 'Address unavailable'}</p>
                   <button
                     onClick={() => handleCopy(payerWallet?.address)}
-                    className="flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-parchment transition hover:bg-white/10"
+                    className="shrink-0 flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-2 text-xs text-parchment transition hover:bg-white/10"
                   >
-                    {copyToast === 'copied' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    {copyToast === 'copied' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                     {copyToast === 'copied' ? 'Copied' : 'Copy'}
                   </button>
                 </div>
-                <p className="break-all font-mono text-base text-parchment">{payerWallet?.address || 'Address unavailable'}</p>
               </div>
 
-              <div className="rounded-2xl border border-sand/40 bg-sand/10 p-4 space-y-3">
-                <p className="text-sand font-medium">How to fund your wallet:</p>
-                <ol className="list-decimal list-inside space-y-2 text-xs text-sand/90">
-                  <li>Visit <a href="https://faucet.circle.com/" target="_blank" rel="noopener noreferrer" className="underline hover:text-sand">faucet.circle.com</a></li>
-                  <li>Select <strong>USDC</strong> and <strong>Solana Devnet</strong></li>
-                  <li>Paste your wallet address above</li>
-                  <li>Request tokens (10 USDC per hour)</li>
-                  <li>Get SOL for fees: <code className="text-sand bg-sand/20 px-1 rounded">solana airdrop 0.1 {payerWallet?.address?.slice(0, 8)}...</code></li>
+              <div className="rounded-2xl border border-sand/30 bg-sand/5 p-4">
+                <p className="text-sm font-medium text-sand mb-3">Steps to fund:</p>
+                <ol className="space-y-3 text-sm text-sand/90">
+                  <li className="flex gap-3">
+                    <span className="shrink-0 font-bold">1.</span>
+                    <span>Visit <a href="https://faucet.circle.com/" target="_blank" rel="noopener noreferrer" className="underline hover:text-sand font-medium">faucet.circle.com</a></span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="shrink-0 font-bold">2.</span>
+                    <span>Select <strong>USDC</strong> and <strong>Solana Devnet</strong></span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="shrink-0 font-bold">3.</span>
+                    <span>Paste your wallet address from above</span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="shrink-0 font-bold">4.</span>
+                    <span>Request tokens (10 USDC per hour)</span>
+                  </li>
                 </ol>
               </div>
 
-              <p className="text-xs text-fog/70">Once funded, you can start crawling data. Balances update after Solana confirmation (~1 min).</p>
+              <p className="text-xs text-fog/70">Balances update after Solana confirmation (~1 minute)</p>
             </div>
           ) : (
             <>

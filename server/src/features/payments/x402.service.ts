@@ -1,4 +1,5 @@
 import { loadEnv } from '@/config/env.js';
+import { createFacilitatorConfig } from '@coinbase/x402';
 
 type VerifyPaymentRequest = {
   scheme: string;
@@ -38,13 +39,22 @@ type SettlePaymentResponse = {
   status: 'pending' | 'confirmed' | 'failed';
 };
 
-export async function verifyX402Payment(payment: VerifyPaymentRequest): Promise<VerifyPaymentResponse> {
-  const { X402_FACILITATOR_URL } = loadEnv();
-  if (!X402_FACILITATOR_URL) throw new Error('X402_FACILITATOR_URL not configured');
+function getFacilitator(): ReturnType<typeof createFacilitatorConfig> {
+  const env = loadEnv();
+  if (!env.CDP_API_KEY_ID || !env.CDP_API_KEY_SECRET) {
+    throw new Error('CDP_API_KEY_ID and CDP_API_KEY_SECRET are required');
+  }
+  return createFacilitatorConfig(env.CDP_API_KEY_ID, env.CDP_API_KEY_SECRET);
+}
 
-  const res = await fetch(X402_FACILITATOR_URL + '/verify', {
+export async function verifyX402Payment(payment: VerifyPaymentRequest): Promise<VerifyPaymentResponse> {
+  const facilitator = getFacilitator();
+  const authHeaders = await facilitator.createAuthHeaders?.();
+  const headers = authHeaders?.verify || {};
+
+  const res = await fetch(facilitator.url + '/verify', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(payment),
   });
 
@@ -57,12 +67,13 @@ export async function verifyX402Payment(payment: VerifyPaymentRequest): Promise<
 }
 
 export async function settleX402Payment(payment: SettlePaymentRequest): Promise<SettlePaymentResponse> {
-  const { X402_FACILITATOR_URL } = loadEnv();
-  if (!X402_FACILITATOR_URL) throw new Error('X402_FACILITATOR_URL not configured');
+  const facilitator = getFacilitator();
+  const authHeaders = await facilitator.createAuthHeaders?.();
+  const headers = authHeaders?.settle || {};
 
-  const res = await fetch(X402_FACILITATOR_URL + '/settle', {
+  const res = await fetch(facilitator.url + '/settle', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(payment),
   });
 
@@ -74,13 +85,10 @@ export async function settleX402Payment(payment: SettlePaymentRequest): Promise<
   return await res.json();
 }
 
-// Discovery helper for facilitator capabilities
 export async function getSupportedNetworks(): Promise<{ scheme: string; network: string }[]> {
-  const { X402_FACILITATOR_URL } = loadEnv();
-  if (!X402_FACILITATOR_URL) return [];
-
   try {
-    const res = await fetch(X402_FACILITATOR_URL + '/supported');
+    const facilitator = getFacilitator();
+    const res = await fetch(facilitator.url + '/supported');
     if (!res.ok) return [];
     const data = await res.json();
     return data.networks || [];
@@ -90,12 +98,15 @@ export async function getSupportedNetworks(): Promise<{ scheme: string; network:
 }
 
 export async function getSupportedKinds(): Promise<{ kinds: Array<{ scheme: string; network: string; extra?: any }> }> {
-  const { X402_FACILITATOR_URL } = loadEnv();
-  if (!X402_FACILITATOR_URL) return { kinds: [] };
-  const res = await fetch(X402_FACILITATOR_URL + '/supported');
-  if (!res.ok) return { kinds: [] };
-  const data = await res.json().catch(() => ({}));
-  return { kinds: data.kinds || [] };
+  try {
+    const facilitator = getFacilitator();
+    const res = await fetch(facilitator.url + '/supported');
+    if (!res.ok) return { kinds: [] };
+    const data = await res.json().catch(() => ({}));
+    return { kinds: data.kinds || [] };
+  } catch {
+    return { kinds: [] };
+  }
 }
 
 export type X402PaymentRequirements = {
@@ -111,20 +122,20 @@ export type X402PaymentRequirements = {
   extra?: any;
 };
 
-// Verifies that a client-signed X-PAYMENT matches our advertised requirements; does not settle on-chain.
 export async function verifyX402Payload(payload: any, reqs: X402PaymentRequirements): Promise<{ isValid: boolean; invalidReason?: string; payer?: string }>
 {
-  const { X402_FACILITATOR_URL } = loadEnv();
-  if (!X402_FACILITATOR_URL) throw new Error('X402_FACILITATOR_URL not configured');
+  const facilitator = getFacilitator();
+  const authHeaders = await facilitator.createAuthHeaders?.();
+  const headers = authHeaders?.verify || {};
 
   const body = { x402Version: payload?.x402Version ?? 1, paymentPayload: payload, paymentRequirements: reqs };
-  console.log('[X402] Verifying with facilitator:', X402_FACILITATOR_URL + '/verify');
+  console.log('[X402] Verifying with facilitator:', facilitator.url + '/verify');
   console.log('[X402] Payload keys:', Object.keys(payload || {}));
   console.log('[X402] Requirements:', JSON.stringify(reqs, null, 2));
 
-  const res = await fetch(X402_FACILITATOR_URL + '/verify', {
+  const res = await fetch(facilitator.url + '/verify', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
 
@@ -139,15 +150,15 @@ export async function verifyX402Payload(payload: any, reqs: X402PaymentRequireme
   return result;
 }
 
-// Broadcasts settlement after successful verification; facilitator returns network/tx information.
 export async function settleX402Payload(payload: any, reqs: X402PaymentRequirements): Promise<{ success: boolean; error?: string | null; txHash?: string | null; networkId?: string | null }>
 {
-  const { X402_FACILITATOR_URL } = loadEnv();
-  if (!X402_FACILITATOR_URL) throw new Error('X402_FACILITATOR_URL not configured');
+  const facilitator = getFacilitator();
+  const authHeaders = await facilitator.createAuthHeaders?.();
+  const headers = authHeaders?.settle || {};
 
-  const res = await fetch(X402_FACILITATOR_URL + '/settle', {
+  const res = await fetch(facilitator.url + '/settle', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify({ x402Version: payload?.x402Version ?? 1, paymentPayload: payload, paymentRequirements: reqs }),
   });
 

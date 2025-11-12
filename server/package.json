@@ -14,6 +14,7 @@
     "sol:balance": "node dist/scripts/sol-balance.js"
   },
   "dependencies": {
+    "@coinbase/x402": "^0.7.1",
     "@fastify/cors": "^11.1.0",
     "@fastify/formbody": "^8.0.2",
     "@fastify/helmet": "^13.0.2",

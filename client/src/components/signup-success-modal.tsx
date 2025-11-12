@@ -63,7 +63,7 @@ export function SignupSuccessModal({ open, onClose }: SignupSuccessModalProps) {
               </div>
 
               <Button onClick={() => { onClose(); navigate('/app'); }} className="w-full bg-[#cfbea0] text-black hover:bg-[#cfbea0]">
-                Thanks :) <ArrowRight className="ml-2 h-4 w-4" />
+                Proceed <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
           </motion.div>
