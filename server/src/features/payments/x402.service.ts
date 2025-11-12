@@ -100,7 +100,9 @@ export async function getSupportedNetworks(): Promise<{ scheme: string; network:
 export async function getSupportedKinds(): Promise<{ kinds: Array<{ scheme: string; network: string; extra?: any }> }> {
   try {
     const facilitator = getFacilitator();
-    const res = await fetch(facilitator.url + '/supported');
+    const authHeaders = await facilitator.createAuthHeaders?.();
+    const headers = authHeaders?.supported || {};
+    const res = await fetch(facilitator.url + '/supported', { headers });
     if (!res.ok) return { kinds: [] };
     const data = await res.json().catch(() => ({}));
     return { kinds: data.kinds || [] };
