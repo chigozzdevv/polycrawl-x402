@@ -235,7 +235,9 @@ export async function fetchService(
     };
 
     const fetchCloudinaryWithFallback = async (publicIdOrUrl: string): Promise<{ chunks: string[]; bytes: number }> => {
+      console.log('[Cloudinary] Input storage_ref:', publicIdOrUrl);
       const pubUrl = cloudinaryUrlUpload(publicIdOrUrl);
+      console.log('[Cloudinary] Generated URL:', pubUrl);
       return await fetchAsChunks(pubUrl);
     };
 

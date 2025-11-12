@@ -94,6 +94,33 @@ export function ResourcesPage() {
     e.preventDefault();
     setFormSubmitting(true);
     setError('');
+
+    if (resourceForm.type === 'file' && !resourceForm.file) {
+      setError('Please select a file to upload');
+      setFormSubmitting(false);
+      return;
+    }
+
+    if (resourceForm.type === 'site' && !resourceForm.domain) {
+      setError('Please select a verified domain');
+      setFormSubmitting(false);
+      return;
+    }
+
+    const hasPrice = resourceForm.priceFlat || resourceForm.pricePerKb;
+    if (!hasPrice) {
+      setError('Please set at least one pricing option (flat price or price per KB)');
+      setFormSubmitting(false);
+      return;
+    }
+
+    const hasModes = resourceForm.modes.raw || resourceForm.modes.summary;
+    if (!hasModes) {
+      setError('Please select at least one mode (raw or summary)');
+      setFormSubmitting(false);
+      return;
+    }
+
     try {
       let storageRef: string | undefined;
 
