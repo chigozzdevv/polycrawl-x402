@@ -108,7 +108,7 @@ export function GetStartedPage() {
               <div className="flex-1">
                 <h3 className="text-xl font-medium">Step 3: Start Crawling</h3>
                 <p className="mt-2 text-sm text-fog">
-                  Configure your AI agent with the MCP endpoint and credentials, then start making requests
+                  Configure your AI agent with the MCP endpoint and start making requests
                 </p>
                 <div className="mt-4 rounded-lg border border-white/10 bg-white/5 p-4">
                   <p className="text-xs text-fog">
