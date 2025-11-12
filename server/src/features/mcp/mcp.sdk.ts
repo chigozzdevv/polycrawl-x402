@@ -35,9 +35,7 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
     },
     async (args: DiscoverInput, extra) => {
       try {
-        console.log('[MCP Tool] discover_resources called with args:', JSON.stringify(args));
         const context = getSessionContext(extra?.sessionId);
-        console.log('[MCP Tool] Session context:', context ? 'found' : 'missing');
 
         if (!context) {
           console.error('[MCP Tool] OAuth context missing');
@@ -48,36 +46,12 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
           };
         }
 
-        console.log('[MCP Tool] Calling discoverService with userId:', context.userId);
         const out = await discoverService({
           query: args.query,
           filters: args.filters,
           userId: context.userId,
           agentId: context.agentId
         });
-
-        console.log('[MCP Tool] discoverService returned', out.results.length, 'results');
-        console.log('[MCP Tool] Full output structure:', JSON.stringify(out, null, 2));
-
-        // Log each field type to help debug validation issues
-        if (out.results.length > 0) {
-          const first = out.results[0];
-          console.log('[MCP Tool] First result field types:', {
-            resourceId: typeof first.resourceId,
-            title: typeof first.title,
-            type: typeof first.type,
-            format: typeof first.format,
-            domain: typeof first.domain,
-            updatedAt: typeof first.updatedAt,
-            summary: typeof first.summary,
-            tags: typeof first.tags,
-            priceEstimate: typeof first.priceEstimate,
-            avgSizeKb: typeof first.avgSizeKb,
-            samplePreview: typeof first.samplePreview,
-            relevanceScore: typeof first.relevanceScore,
-            latencyMs: typeof first.latencyMs,
-          });
-        }
 
         return {
           structuredContent: out,
@@ -106,7 +80,6 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
     },
     async (args: FetchInput, extra) => {
       try {
-        console.log('[MCP Tool] fetch_content called with args:', JSON.stringify(args));
         const { resourceId, mode, constraints } = args;
 
         if (!resourceId) {
@@ -119,7 +92,6 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
         }
 
         const context = getSessionContext(extra?.sessionId);
-        console.log('[MCP Tool] Session context:', context ? 'found' : 'missing');
 
         if (!context) {
           console.error('[MCP Tool] OAuth context missing');
@@ -131,8 +103,6 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
         }
 
         const x402 = (context as any)?._x402;
-        console.log('[MCP Tool] X402 context:', x402 ? 'present' : 'missing');
-        console.log('[MCP Tool] Calling fetchService with resourceId:', resourceId);
 
         const out = await fetchService({
           userId: context.userId,
@@ -154,10 +124,8 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
         }
 
         if (x402 && out.pendingReceipt) {
-          console.log('[MCP Tool] Settling via X402 facilitator');
           try {
             const res = await settleX402Payload(x402.payload, x402.requirements);
-            console.log('[MCP Tool] X402 settlement result:', res);
             const receipt = await finalizeExternalReceipt(out.pendingReceipt, { x402Tx: res.txHash ?? null });
             out.receipt = receipt;
           } catch (err) {
@@ -169,30 +137,6 @@ export async function createMcpRuntime(): Promise<McpRuntime> {
               content: [{ type: 'text', text: `X402 settlement failed: ${err}` }],
             };
           }
-        }
-
-        console.log('[MCP Tool] fetchService succeeded');
-        console.log('[MCP Tool] Full fetch output structure:', JSON.stringify(out, null, 2));
-
-        if (out.receipt) {
-          console.log('[MCP Tool] Receipt field types:', {
-            id: typeof out.receipt.id,
-            resource: typeof out.receipt.resource,
-            providerId: typeof out.receipt.providerId,
-            userId: typeof out.receipt.userId,
-            agentId: typeof out.receipt.agentId,
-            mode: typeof out.receipt.mode,
-            bytes_billed: typeof out.receipt.bytes_billed,
-            unit_price: typeof out.receipt.unit_price,
-            flat_price: typeof out.receipt.flat_price,
-            paid_total: typeof out.receipt.paid_total,
-            splits: typeof out.receipt.splits,
-            policy_version: typeof out.receipt.policy_version,
-            x402_tx: typeof out.receipt.x402_tx,
-            tap_digest: typeof out.receipt.tap_digest,
-            ts: typeof out.receipt.ts,
-            sig: typeof out.receipt.sig,
-          });
         }
 
         const payload = { content: out.content, receipt: out.receipt };
