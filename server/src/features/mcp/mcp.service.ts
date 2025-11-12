@@ -4,7 +4,7 @@ import { getDb } from '@/config/db.js';
 import { createHold, releaseHold, captureHold } from '@/features/wallets/wallets.model.js';
 import { findProviderById } from '@/features/providers/providers.model.js';
 import { createSignedReceipt } from '@/features/receipts/receipts.model.js';
-import { signCloudinaryUrl, cloudinaryUrlUpload, cloudinaryPrivateDownloadUrl } from '@/utils/cloudinary.js';
+import { cloudinaryUrlUpload } from '@/utils/cloudinary.js';
 import { findConnectorById } from '@/features/connectors/connectors.model.js';
 import { fetchViaConnector } from '@/features/connectors/connectors.service.js';
 import { checkSpendingCaps } from '@/features/caps/caps.service.js';
@@ -234,23 +234,9 @@ export async function fetchService(
       return { chunks: out, bytes: total };
     };
 
-    // Helper: try authenticated signed URL, then fallback to public upload URL
     const fetchCloudinaryWithFallback = async (publicIdOrUrl: string): Promise<{ chunks: string[]; bytes: number }> => {
-      // 1) Private download URL (works for private/authenticated/upload)
-      try {
-        const dl = cloudinaryPrivateDownloadUrl(publicIdOrUrl);
-        return await fetchAsChunks(dl);
-      } catch (e1) {
-        // 2) Authenticated signed delivery
-        try {
-          const authUrl = signCloudinaryUrl(publicIdOrUrl);
-          return await fetchAsChunks(authUrl);
-        } catch (e2) {
-          // 3) Public upload delivery
-          const pubUrl = cloudinaryUrlUpload(publicIdOrUrl);
-          return await fetchAsChunks(pubUrl);
-        }
-      }
+      const pubUrl = cloudinaryUrlUpload(publicIdOrUrl);
+      return await fetchAsChunks(pubUrl);
     };
 
     // Retrieve content either via connector or internal storage; always return chunks

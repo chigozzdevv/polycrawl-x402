@@ -23,29 +23,8 @@ function isHttpUrl(s: string): boolean {
   return /^https?:\/\//i.test(s);
 }
 
-// Prefer authenticated, short‑lived signed URLs for raw resources; passthrough for absolute URLs
-export function signCloudinaryUrl(publicId: string, opts?: { expiresInSeconds?: number }) {
-  if (isHttpUrl(publicId)) return publicId;
-  const c = getCloudinary();
-  const exp = typeof opts?.expiresInSeconds === 'number' ? opts!.expiresInSeconds : 120;
-  const expiresAt = Math.floor(Date.now() / 1000) + exp;
-  return c.url(publicId, { sign_url: true, resource_type: 'raw', type: 'authenticated', expires_at: expiresAt });
-}
-
-// Alternate public delivery for assets uploaded as type=upload (no signing)
 export function cloudinaryUrlUpload(publicId: string) {
   if (isHttpUrl(publicId)) return publicId;
   const c = getCloudinary();
   return c.url(publicId, { resource_type: 'raw', type: 'upload', secure: true });
-}
-
-export function cloudinaryPrivateDownloadUrl(publicId: string, opts?: { expiresInSeconds?: number; type?: 'private' | 'authenticated' }) {
-  if (isHttpUrl(publicId)) return publicId;
-  const exp = typeof opts?.expiresInSeconds === 'number' ? opts!.expiresInSeconds : 300;
-  const type = opts?.type || 'private';
-  let format: string | undefined;
-  const m = publicId.match(/\.([a-z0-9]+)$/i);
-  if (m) format = m[1];
-  // @ts-ignore utils function exists at runtime
-  return (cloudinary as any).utils.private_download_url(publicId, format, { resource_type: 'raw', type, expires_at: Math.floor(Date.now() / 1000) + exp });
 }

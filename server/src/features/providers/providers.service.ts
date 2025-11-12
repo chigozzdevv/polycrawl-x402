@@ -31,7 +31,7 @@ export async function createResource(userId: string, input: Omit<ResourceDoc, '_
 export function generateCloudinaryUploadSignature(publicId: string) {
   const c = getCloudinary();
   const timestamp = Math.floor(Date.now() / 1000);
-  const paramsToSign: any = { public_id: publicId, timestamp };
+  const paramsToSign: any = { public_id: publicId, timestamp, type: 'upload' };
   const signature = c.utils.api_sign_request(paramsToSign, (c.config() as any).api_secret);
   return { timestamp, signature, cloud_name: (c.config() as any).cloud_name, api_key: (c.config() as any).api_key };
 }
