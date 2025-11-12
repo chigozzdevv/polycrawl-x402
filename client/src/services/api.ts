@@ -607,7 +607,7 @@ class ApiService {
     }
 
     const data = await response.json();
-    return data.secure_url;
+    return data.public_id;
   }
 
   async getDomains(): Promise<Domain[]> {
