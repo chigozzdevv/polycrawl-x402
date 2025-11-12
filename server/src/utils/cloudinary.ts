@@ -38,3 +38,14 @@ export function cloudinaryUrlUpload(publicId: string) {
   const c = getCloudinary();
   return c.url(publicId, { resource_type: 'raw', type: 'upload', secure: true });
 }
+
+export function cloudinaryPrivateDownloadUrl(publicId: string, opts?: { expiresInSeconds?: number; type?: 'private' | 'authenticated' }) {
+  if (isHttpUrl(publicId)) return publicId;
+  const exp = typeof opts?.expiresInSeconds === 'number' ? opts!.expiresInSeconds : 300;
+  const type = opts?.type || 'private';
+  let format: string | undefined;
+  const m = publicId.match(/\.([a-z0-9]+)$/i);
+  if (m) format = m[1];
+  // @ts-ignore utils function exists at runtime
+  return (cloudinary as any).utils.private_download_url(publicId, format, { resource_type: 'raw', type, expires_at: Math.floor(Date.now() / 1000) + exp });
+}

@@ -4,7 +4,7 @@ import { getDb } from '@/config/db.js';
 import { createHold, releaseHold, captureHold } from '@/features/wallets/wallets.model.js';
 import { findProviderById } from '@/features/providers/providers.model.js';
 import { createSignedReceipt } from '@/features/receipts/receipts.model.js';
-import { signCloudinaryUrl, cloudinaryUrlUpload } from '@/utils/cloudinary.js';
+import { signCloudinaryUrl, cloudinaryUrlUpload, cloudinaryPrivateDownloadUrl } from '@/utils/cloudinary.js';
 import { findConnectorById } from '@/features/connectors/connectors.model.js';
 import { fetchViaConnector } from '@/features/connectors/connectors.service.js';
 import { checkSpendingCaps } from '@/features/caps/caps.service.js';
@@ -236,17 +236,19 @@ export async function fetchService(
 
     // Helper: try authenticated signed URL, then fallback to public upload URL
     const fetchCloudinaryWithFallback = async (publicIdOrUrl: string): Promise<{ chunks: string[]; bytes: number }> => {
-      const primary = signCloudinaryUrl(publicIdOrUrl);
+      // 1) Private download URL (works for private/authenticated/upload)
       try {
-        return await fetchAsChunks(primary);
-      } catch (e: any) {
-        const msg = String(e?.message || e);
-        // On auth/config issues with authenticated delivery, retry with upload delivery
-        const fallback = cloudinaryUrlUpload(publicIdOrUrl);
+        const dl = cloudinaryPrivateDownloadUrl(publicIdOrUrl);
+        return await fetchAsChunks(dl);
+      } catch (e1) {
+        // 2) Authenticated signed delivery
         try {
-          return await fetchAsChunks(fallback);
-        } catch {
-          throw new Error(msg);
+          const authUrl = signCloudinaryUrl(publicIdOrUrl);
+          return await fetchAsChunks(authUrl);
+        } catch (e2) {
+          // 3) Public upload delivery
+          const pubUrl = cloudinaryUrlUpload(publicIdOrUrl);
+          return await fetchAsChunks(pubUrl);
         }
       }
     };
