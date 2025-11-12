@@ -16,13 +16,16 @@
 8) Payments and settlement (X402 on Solana USDC)
 9) Receipts and verification
 10) Setup and installation
+    - Quick start (run locally)
     - Prerequisites
-    - Server environment
-    - Client environment
-    - Local development
+    - Server environment (.env)
+    - Client environment (.env)
+    - Local development commands
+    - Where to get credentials
 11) MCP tool reference
 12) Security and compliance notes
 13) Troubleshooting
+14) Project structure
 
 ---
 
@@ -142,6 +145,34 @@ We explicitly settle through X402 on SOL USDC (Solana USDC) for external payment
 
 ## 10) Setup and installation
 
+### Quick start (run locally)
+
+1) Start MongoDB locally or use Atlas (see links below).
+2) Server
+
+```
+cd server
+npm install
+cp .env.example .env  # fill the required values from the table below
+npm run tap:keygen    # optional: generate local TAP keypair into .tap-keys/
+npm run dev           # starts Fastify on http://localhost:3000
+```
+
+3) Client
+
+```
+cd client
+npm install
+cp .env.example .env  # set VITE_API_BASE_URL=http://localhost:3000
+npm run dev           # starts Vite on http://localhost:5173
+```
+
+Production build:
+
+```
+cd server && npm run build && npm start
+```
+
 ### Prerequisites
 
 - Node.js 20+
@@ -153,27 +184,30 @@ We explicitly settle through X402 on SOL USDC (Solana USDC) for external payment
 Minimum:
 
 - `PORT=3000`
-- `MONGODB_URI=mongodb://localhost:27017/polycrawl`
+- `MONGODB_URI=mongodb://localhost:27017/polycrawl` (or Atlas URI)
 - `JWT_SECRET` (strong random)
-- `ED25519_PRIVATE_KEY` (PKCS#8) or `ED25519_PRIVATE_KEY_PATH`
-- `KEY_ENCRYPTION_KEY` (encrypt wallet keys/connectors)
+- `ED25519_PRIVATE_KEY` (PKCS#8 string) or `ED25519_PRIVATE_KEY_PATH` (file path) — used to sign receipts and OAuth tokens
+- `KEY_ENCRYPTION_KEY` (used to encrypt wallet keys and connector secrets)
 - `CLIENT_APP_URL` (e.g., http://localhost:5173)
 
-TAP (choose one path):
+TAP (mock by default):
 
-- `TAP_JWKS_URL` — verify against hosted JWKS; or
-- `TAP_PRIVATE_KEY_PATH` (+ optional `TAP_KEY_ID`) — derive public key locally for verification
+- `TAP_JWKS_URL` — optional; verification will first try JWKS, then fall back to local key
+- `TAP_PRIVATE_KEY_PATH` (+ optional `TAP_KEY_ID`) — enables deriving a public key locally for verification
+- Note: the MCP route runs a TAP mock so agents (e.g., Claude) without TAP signing can still be demonstrated; real TAP is ready when clients support signatures.
 
-X402 / Solana:
+X402 / Solana (external settlement via Coinbase CDP facilitator):
 
-- `X402_FACILITATOR_URL=https://facilitator.payai.network`
 - `X402_NETWORK=solana-devnet`
-- `X402_PAYTO=<PLATFORM_USDC_RECIPIENT>` (base58)
-- `X402_USDC_MINT=4zMMC9...` and `X402_USDC_DECIMALS=6`
-- `X402_PLATFORM_PRIVATE_KEY=<base64 secret key>` (needed for provider payouts)
-- Optional: `SOLANA_RPC_URL`, `SOLANA_WS_URL`
+- `X402_PAYTO=<PLATFORM_USDC_RECIPIENT>` (Solana address)
+- `X402_USDC_MINT=4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` (USDC devnet) and `X402_USDC_DECIMALS=6`
+- `CDP_API_KEY_ID=<your CDP key id>` and `CDP_API_KEY_SECRET=<your CDP key secret>` — required to call the Coinbase facilitator
+- `X402_PLATFORM_PRIVATE_KEY=<base64 secret key>` — platform wallet for payouts and funding
+- Optional: `SOLANA_RPC_URL`, `SOLANA_WS_URL` (custom RPC/WS)
 
-Cloudinary (for internal storage refs): `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
+Cloudinary (optional storage for signed URLs):
+
+- `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
 
 Other:
 
@@ -184,27 +218,23 @@ Other:
 
 - `VITE_API_BASE_URL=http://localhost:3000` (or leave empty; client infers :3000 in dev)
 
-### Local development
+### Local development commands
 
-1) Start MongoDB.
-2) Server
+- Generate local TAP keys (optional): `npm run tap:keygen`
+- Start TAP proxy (optional demo): `npm run tap:proxy`
+- Fund agents on signup (devnet): enable `FUND_AGENT_ON_SIGNUP=true`
 
-```
-cd server
-npm install
-cp .env.example .env  # fill required values
-npm run tap:keygen    # optional local TAP keys → .tap-keys/
-npm run dev
-```
+### Where to get credentials
 
-3) Client
+- MongoDB (local): https://www.mongodb.com/try/download/community
+- MongoDB Atlas (cloud): https://www.mongodb.com/atlas/database
+- Coinbase CDP API keys: https://docs.cdp.coinbase.com/ (create keys in the developer portal)
+- Cloudinary: https://cloudinary.com/
+- Solana devnet explorer: https://explorer.solana.com/?cluster=devnet
 
-```
-cd client
-npm install
-cp .env.example .env  # set VITE_API_BASE_URL
-npm run dev
-```
+For Solana wallets and keys, you can use `solana-keygen` or a custodial approach; ensure the platform wallet has devnet SOL for fees and USDC for payouts.
+
+---
 
 ## 11) MCP tool reference
 
@@ -236,3 +266,25 @@ npm run dev
 - TAP verification errors: provide `TAP_JWKS_URL` or set `TAP_PRIVATE_KEY_PATH` so a public key can be derived.
 - On‑chain payouts failing: ensure platform wallet has SOL for fees and USDC on devnet; verify `X402_PLATFORM_PRIVATE_KEY`.
 - Large assets return signed URLs; ensure Cloudinary credentials are set.
+
+## 14) Project structure
+
+- Root
+  - client/ — React app (Vite)
+    - src/pages/dashboard/* — consumer/provider dashboards (wallets, receipts, resources)
+    - src/services/api.ts — typed API client
+  - server/ — Fastify API + MCP runtime
+    - src/server.ts, src/app.ts — bootstrap
+    - src/config/ — env.ts, db.ts
+    - src/middleware/ — oauth.ts, x402.ts, tap.ts
+    - src/features/
+      - auth/ — routes, service, model for auth and OAuth 2.1
+      - mcp/ — mcp.routes.ts, schema, controller, service, SDK
+      - payments/ — x402.service.ts, x402-custodial.service.ts
+      - tap/ — tap.verifier.ts, tap.middleware.ts, tap.mock.routes.ts, tap.digest.ts
+      - wallets/ — internal wallets, keys, services
+      - receipts/ — signed receipt persistence
+      - resources/, providers/, connectors/, caps/, analytics/, agents/
+    - src/services/ — solana/solana.service.ts, crypto/keystore.ts
+    - src/scripts/ — fund-agent.ts, airdrop.ts, sol-balance.ts
+  - README.md — this guide
