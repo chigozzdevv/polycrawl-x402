@@ -14,14 +14,10 @@ export function WalletPage() {
   const [error, setError] = useState('');
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const [depositAmount, setDepositAmount] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawAddress, setWithdrawAddress] = useState('');
-  const [depositStatus, setDepositStatus] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
   const [withdrawStatus, setWithdrawStatus] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
-  const [depositSubmitting, setDepositSubmitting] = useState(false);
   const [withdrawSubmitting, setWithdrawSubmitting] = useState(false);
-  const [depositTab, setDepositTab] = useState<'onchain' | 'request'>('onchain');
   const [copyToast, setCopyToast] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,32 +33,6 @@ export function WalletPage() {
       setError(err.message || 'Failed to load wallets');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleDeposit = async () => {
-    setDepositStatus(null);
-    const amount = Number(depositAmount);
-    if (!amount || amount <= 0) {
-      setDepositStatus({ tone: 'error', message: 'Enter a valid amount greater than 0.' });
-      return;
-    }
-    setDepositSubmitting(true);
-    try {
-      const res = await api.createDeposit('payer', amount);
-      setDepositStatus({ tone: 'success', message: `Request ${res.id} submitted. We’ll mint devnet USDC shortly.` });
-      setDepositAmount('');
-      await loadWallets();
-    } catch (err: any) {
-      if (err?.message === 'DAILY_LIMIT_REACHED') {
-        setDepositStatus({ tone: 'error', message: 'Daily mint limit reached. Try again tomorrow.' });
-      } else if (err?.message === 'AMOUNT_EXCEEDS_LIMIT') {
-        setDepositStatus({ tone: 'error', message: `Single request cannot exceed $${MAX_REQUEST_AMOUNT.toLocaleString()}.` });
-      } else {
-        setDepositStatus({ tone: 'error', message: err.message || 'Unable to create deposit' });
-      }
-    } finally {
-      setDepositSubmitting(false);
     }
   };
 
@@ -279,100 +249,48 @@ const MAX_REQUEST_AMOUNT = 5000;
       </motion.div>
     </div>
 
-      <Modal open={depositOpen} title="Add funds" onClose={() => { setDepositOpen(false); setDepositStatus(null); }}>
+      <Modal open={depositOpen} title="Add funds" onClose={() => setDepositOpen(false)}>
         <div className="space-y-4">
-          <div className="flex rounded-full border border-white/15 bg-transparent p-1 text-xs font-semibold uppercase tracking-[0.2em] text-fog">
-            {(['onchain', 'request'] as const).map((tab) => {
-              const isActive = depositTab === tab
-              return (
-                <button
-                  key={tab}
-                  onClick={() => setDepositTab(tab)}
-                  className={`flex-1 rounded-full px-3 py-1 transition ${
-                    isActive ? 'bg-sand text-ink' : 'bg-white/5 text-fog hover:text-parchment'
-                  }`}
-                >
-                  {tab === 'onchain' ? 'On-chain' : 'Request'}
-                </button>
-              )
-            })}
+          <p className="text-sm text-parchment font-medium">Fund your wallet using Circle's USDC faucet</p>
+
+          <div className="rounded-2xl border border-white/15 bg-[#121212] p-4">
+            <div className="mb-3 text-xs uppercase tracking-wider text-fog/70">Your Payer Wallet Address</div>
+            <div className="flex items-center gap-2">
+              <p className="flex-1 break-all font-mono text-sm text-parchment">{payerWallet?.address || 'Address unavailable'}</p>
+              <button
+                onClick={() => handleCopy(payerWallet?.address)}
+                className="shrink-0 flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-2 text-xs text-parchment transition hover:bg-white/10"
+              >
+                {copyToast === 'copied' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {copyToast === 'copied' ? 'Copied' : 'Copy'}
+              </button>
+            </div>
           </div>
 
-          {depositTab === 'onchain' ? (
-            <div className="space-y-4">
-              <p className="text-sm text-parchment font-medium">Fund your wallet using Circle's USDC faucet</p>
+          <div className="rounded-2xl border border-sand/30 bg-sand/5 p-4">
+            <p className="text-sm font-medium text-sand mb-3">Steps to fund:</p>
+            <ol className="space-y-3 text-sm text-sand/90">
+              <li className="flex gap-3">
+                <span className="shrink-0 font-bold">1.</span>
+                <span>Visit <a href="https://faucet.circle.com/" target="_blank" rel="noopener noreferrer" className="underline hover:text-sand font-medium">faucet.circle.com</a></span>
+              </li>
+              <li className="flex gap-3">
+                <span className="shrink-0 font-bold">2.</span>
+                <span>Select <strong>USDC</strong> and <strong>Solana Devnet</strong></span>
+              </li>
+              <li className="flex gap-3">
+                <span className="shrink-0 font-bold">3.</span>
+                <span>Paste your wallet address from above</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="shrink-0 font-bold">4.</span>
+                <span>Request tokens (10 USDC per hour)</span>
+              </li>
+            </ol>
+          </div>
 
-              <div className="rounded-2xl border border-white/15 bg-[#121212] p-4">
-                <div className="mb-3 text-xs uppercase tracking-wider text-fog/70">Your Payer Wallet Address</div>
-                <div className="flex items-center gap-2">
-                  <p className="flex-1 break-all font-mono text-sm text-parchment">{payerWallet?.address || 'Address unavailable'}</p>
-                  <button
-                    onClick={() => handleCopy(payerWallet?.address)}
-                    className="shrink-0 flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-2 text-xs text-parchment transition hover:bg-white/10"
-                  >
-                    {copyToast === 'copied' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                    {copyToast === 'copied' ? 'Copied' : 'Copy'}
-                  </button>
-                </div>
-              </div>
+          <p className="text-xs text-fog/70">Balances update after Solana confirmation (~1 minute)</p>
 
-              <div className="rounded-2xl border border-sand/30 bg-sand/5 p-4">
-                <p className="text-sm font-medium text-sand mb-3">Steps to fund:</p>
-                <ol className="space-y-3 text-sm text-sand/90">
-                  <li className="flex gap-3">
-                    <span className="shrink-0 font-bold">1.</span>
-                    <span>Visit <a href="https://faucet.circle.com/" target="_blank" rel="noopener noreferrer" className="underline hover:text-sand font-medium">faucet.circle.com</a></span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="shrink-0 font-bold">2.</span>
-                    <span>Select <strong>USDC</strong> and <strong>Solana Devnet</strong></span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="shrink-0 font-bold">3.</span>
-                    <span>Paste your wallet address from above</span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="shrink-0 font-bold">4.</span>
-                    <span>Request tokens (10 USDC per hour)</span>
-                  </li>
-                </ol>
-              </div>
-
-              <p className="text-xs text-fog/70">Balances update after Solana confirmation (~1 minute)</p>
-            </div>
-          ) : (
-            <>
-              <p className="text-sm text-fog">
-                Request Polycrawl to mint devnet USDC for you (max ${MAX_REQUEST_AMOUNT.toLocaleString()} per request, ${MAX_REQUEST_AMOUNT.toLocaleString()} total per day).
-                Funds are credited immediately after approval.
-              </p>
-              <label className="space-y-1 text-sm text-fog">
-                <span>Amount (USD)</span>
-                <input
-                  type="number"
-                  min="1"
-                  max={MAX_REQUEST_AMOUNT}
-                  value={depositAmount}
-                  onChange={(e) => setDepositAmount(e.target.value)}
-                  className="w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-parchment focus:border-sand/50 focus:outline-none"
-                />
-              </label>
-              <div className="pt-2">
-                <Button onClick={handleDeposit} disabled={depositSubmitting} className="w-full">
-                  {depositSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit mint request'}
-                </Button>
-              </div>
-            </>
-          )}
-          {depositStatus && (
-            <div
-              className={`rounded-xl border px-4 py-3 text-sm ${
-                depositStatus.tone === 'success' ? 'border-sand/40 bg-sand/10 text-sand' : 'border-ember/40 bg-ember/10 text-ember'
-              }`}
-            >
-              {depositStatus.message}
-            </div>
-          )}
           {copyToast && (
             <p className="text-xs text-sand">
               {copyToast === 'copied' ? 'Address copied to clipboard' : copyToast}
