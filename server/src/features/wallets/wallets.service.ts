@@ -2,6 +2,7 @@ import { Keypair } from '@solana/web3.js';
 import { encryptSecret } from '@/services/crypto/keystore.js';
 import { upsertWalletKey, findWalletKey } from '@/features/wallets/keys.model.js';
 import { getOrInitWallet, debitWallet, creditWallet } from '@/features/wallets/wallets.model.js';
+import { getBalances } from '@/services/solana/solana.service.js';
 import { insertDeposit } from '@/features/payments/deposits.model.js';
 import { insertWithdrawal, updateWithdrawal } from '@/features/payments/withdrawals.model.js';
 import { getDb } from '@/config/db.js';
@@ -39,9 +40,11 @@ export async function getWallets(userId: string) {
   const payout = await getOrInitWallet(userId, 'payout');
   const payerKey = (await findWalletKey(userId, 'payer')) || (await ensureSolanaKey(userId, 'payer'));
   const payoutKey = (await findWalletKey(userId, 'payout')) || (await ensureSolanaKey(userId, 'payout'));
+  const payerOnchain = payerKey?.public_key ? await getBalances(payerKey.public_key) : { sol: 0, usdc: 0 };
+  const payoutOnchain = payoutKey?.public_key ? await getBalances(payoutKey.public_key) : { sol: 0, usdc: 0 };
   return {
-    payer: { ...payer, address: payerKey?.public_key },
-    payout: { ...payout, address: payoutKey?.public_key },
+    payer: { ...payer, address: payerKey?.public_key, onchain: payerOnchain },
+    payout: { ...payout, address: payoutKey?.public_key, onchain: payoutOnchain },
   };
 }
 

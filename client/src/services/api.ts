@@ -65,6 +65,7 @@ export interface Wallet {
   blocked: number;
   status: 'active' | 'frozen';
   address?: string;
+  onchain?: { sol?: number; usdc?: number };
 }
 
 export interface Provider {

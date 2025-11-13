@@ -114,7 +114,7 @@ const MAX_REQUEST_AMOUNT = 5000;
                 <div>
                   <p className="text-sm text-fog mb-1">Payer Wallet</p>
                   <h2 className="text-3xl font-semibold text-parchment">
-                    {formatCurrency(payerWallet?.available || 0)}
+                    {formatCurrency(payerWallet?.onchain?.usdc || 0)}
                   </h2>
                 </div>
                 <div className="w-12 h-12 bg-sand/10 rounded-full flex items-center justify-center">
@@ -132,6 +132,12 @@ const MAX_REQUEST_AMOUNT = 5000;
                   <span className="text-fog">Blocked</span>
                   <span className="text-ember font-medium">
                     {formatCurrency(payerWallet?.blocked || 0)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-fog">On-chain USDC</span>
+                  <span className="text-parchment font-medium">
+                    {formatCurrency(payerWallet?.onchain?.usdc || 0)}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm pt-2 border-t border-white/10">
@@ -162,7 +168,7 @@ const MAX_REQUEST_AMOUNT = 5000;
                 <div>
                   <p className="text-sm text-fog mb-1">Payout Wallet</p>
                   <h2 className="text-3xl font-semibold text-parchment">
-                    {formatCurrency(payoutWallet?.available || 0)}
+                    {formatCurrency(payoutWallet?.onchain?.usdc || 0)}
                   </h2>
                 </div>
                 <div className="w-12 h-12 bg-ember/10 rounded-full flex items-center justify-center">
@@ -180,6 +186,12 @@ const MAX_REQUEST_AMOUNT = 5000;
                   <span className="text-fog">Blocked</span>
                   <span className="text-fog font-medium">
                     {formatCurrency(payoutWallet?.blocked || 0)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-fog">On-chain USDC</span>
+                  <span className="text-parchment font-medium">
+                    {formatCurrency(payoutWallet?.onchain?.usdc || 0)}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm pt-2 border-t border-white/10">
