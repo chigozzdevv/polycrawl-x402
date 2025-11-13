@@ -603,7 +603,10 @@ class ApiService {
     });
 
     if (!response.ok) {
-      throw new Error('File upload failed');
+      const errorData = await response.json().catch(() => ({}));
+      const errorMsg = errorData.error?.message || `Upload failed with status ${response.status}`;
+      console.error('Cloudinary upload error:', errorData);
+      throw new Error(errorMsg);
     }
 
     const data = await response.json();
