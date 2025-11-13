@@ -4,7 +4,7 @@ import { getDb } from '@/config/db.js';
 import { createHold, releaseHold, captureHold } from '@/features/wallets/wallets.model.js';
 import { findProviderById } from '@/features/providers/providers.model.js';
 import { createSignedReceipt } from '@/features/receipts/receipts.model.js';
-import { cloudinaryUrlUpload } from '@/utils/cloudinary.js';
+import { resolveCloudinaryUploadUrl } from '@/utils/cloudinary.js';
 import { findConnectorById } from '@/features/connectors/connectors.model.js';
 import { fetchViaConnector } from '@/features/connectors/connectors.service.js';
 import { checkSpendingCaps } from '@/features/caps/caps.service.js';
@@ -129,6 +129,13 @@ export async function fetchService(
   } else if (requestedMode === 'raw' && modes && !modes.includes('raw')) {
     return { status: 403 as const, error: 'MODE_NOT_ALLOWED' };
   }
+  if (requestedMode === 'summary' && (!resource.summary || String(resource.summary).trim().length === 0)) {
+    if (!modes || modes.includes('raw')) {
+      effectiveMode = 'raw';
+    } else {
+      return { status: 404 as const, error: 'SUMMARY_NOT_AVAILABLE' };
+    }
+  }
   const visibility = (resource.policy?.visibility || resource.visibility) as any;
   if (visibility === 'restricted') {
     const allow = resource.policy?.allow || [];
@@ -236,13 +243,19 @@ export async function fetchService(
 
     const fetchCloudinaryWithFallback = async (publicIdOrUrl: string): Promise<{ chunks: string[]; bytes: number }> => {
       console.log('[Cloudinary] Input storage_ref:', publicIdOrUrl);
-      const pubUrl = cloudinaryUrlUpload(publicIdOrUrl);
+      const pubUrl = await resolveCloudinaryUploadUrl(publicIdOrUrl);
       console.log('[Cloudinary] Generated URL:', pubUrl);
       return await fetchAsChunks(pubUrl);
     };
 
-    // Retrieve content either via connector or internal storage; always return chunks
-    if (resource.connector_id) {
+    // If summary mode is effective and summary exists, return it directly from Mongo (no external fetch)
+    if (effectiveMode === 'summary' && resource.summary && String(resource.summary).trim().length > 0) {
+      const buf = Buffer.from(String(resource.summary), 'utf8');
+      bytesBilled = buf.byteLength;
+      content = { chunks: splitToBase64(buf) };
+    }
+    // Retrieve raw content either via connector or internal storage; always return chunks
+    else if (resource.connector_id) {
       const connector = await findConnectorById(resource.connector_id);
       if (!connector) throw new Error('CONNECTOR_NOT_FOUND');
       const fetched = await fetchViaConnector(resource as any, connector);

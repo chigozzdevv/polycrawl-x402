@@ -19,7 +19,12 @@ export function getCloudinary() {
   return cloudinary;
 }
 
-export function cloudinaryUrlUpload(publicId: string) {
+export async function resolveCloudinaryUploadUrl(publicIdOrUrl: string): Promise<string> {
+  if (/^https?:\/\//i.test(publicIdOrUrl)) return publicIdOrUrl;
   const c = getCloudinary();
-  return c.url(publicId, { resource_type: 'raw', type: 'upload', secure: true });
+  try {
+    const res = await c.api.resource(publicIdOrUrl, { resource_type: 'raw' } as any);
+    if (res?.secure_url) return String((res as any).secure_url);
+  } catch {}
+  return c.url(publicIdOrUrl, { resource_type: 'raw', type: 'upload', secure: true });
 }
