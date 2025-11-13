@@ -51,7 +51,7 @@ export function ConsumerOverview() {
         if (cancelled) return
         const payer = wallets.find((wallet) => wallet.role === 'payer')
         setWalletStats({
-          available: payer?.available ?? 0,
+          available: payer?.onchain?.usdc ?? 0,
           blocked: payer?.blocked ?? 0,
           weeklyCap: caps?.global_weekly_cap ?? 0,
         })
