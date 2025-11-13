@@ -352,7 +352,10 @@ export async function fetchService(
 
 export async function finalizeExternalReceipt(pending: PendingReceipt, opts?: { x402Tx?: string | null }) {
   const db = await getDb();
-  const payload = { ...pending.payload, x402_tx: opts?.x402Tx ?? undefined };
+  const payload: any = { ...pending.payload, x402_tx: opts?.x402Tx ?? undefined };
+  if (!payload.provider_onchain_tx && payload.x402_tx) {
+    payload.provider_onchain_tx = payload.x402_tx;
+  }
   await db.collection('requests').updateOne(
     { _id: pending.requestId } as any,
     { $set: { status: 'settled', x402_tx: opts?.x402Tx ?? null } } as any

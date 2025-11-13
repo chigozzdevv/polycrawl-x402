@@ -34,30 +34,37 @@ export async function findResourceById(id: string) {
 export async function searchResourcesByQuery(query: string, opts?: { format?: string[] }) {
   const db = await getDb();
   const tokens = Array.from(new Set(String(query).split(/[^a-zA-Z0-9]+/).filter(t => t.length > 1))).slice(0, 6);
-  const andClauses = tokens.length > 0
-    ? tokens.map(t => ({
+  const orForToken = (t: string) => ({
+    $or: [
+      { title: { $regex: t, $options: 'i' } },
+      { summary: { $regex: t, $options: 'i' } },
+      { sample_preview: { $regex: t, $options: 'i' } },
+      { domain: { $regex: t, $options: 'i' } },
+      { tags: { $in: [new RegExp(t, 'i')] } },
+    ],
+  });
+
+  const strictMatch: any = tokens.length > 0
+    ? { $and: tokens.map((t) => orForToken(t)) }
+    : {
         $or: [
-          { title: { $regex: t, $options: 'i' } },
-          { summary: { $regex: t, $options: 'i' } },
-          { sample_preview: { $regex: t, $options: 'i' } },
-          { domain: { $regex: t, $options: 'i' } },
-          { tags: { $in: [new RegExp(t, 'i')] } },
+          { title: { $regex: query, $options: 'i' } },
+          { summary: { $regex: query, $options: 'i' } },
+          { sample_preview: { $regex: query, $options: 'i' } },
+          { domain: { $regex: query, $options: 'i' } },
+          { tags: { $in: [new RegExp(query, 'i')] } },
         ],
-      }))
-    : [
-        {
-          $or: [
-            { title: { $regex: query, $options: 'i' } },
-            { summary: { $regex: query, $options: 'i' } },
-            { sample_preview: { $regex: query, $options: 'i' } },
-            { domain: { $regex: query, $options: 'i' } },
-            { tags: { $in: [new RegExp(query, 'i')] } },
-          ],
-        },
-      ];
-  const match: any = { $and: andClauses };
-  if (opts?.format?.length) match.format = { $in: opts.format };
-  const cursor = db.collection<ResourceDoc>('resources').find(match).limit(10);
-  const list = await cursor.toArray();
+      };
+  if (opts?.format?.length) strictMatch.format = { $in: opts.format };
+  let list = await db.collection<ResourceDoc>('resources').find(strictMatch).limit(10).toArray();
+
+  // Fallback: if strict returns nothing and we have tokens, show any-of tokens (OR across all token/field pairs)
+  if (list.length === 0 && tokens.length > 0) {
+    const anyPairs = tokens.flatMap((t) => orForToken(t).$or);
+    const looseMatch: any = { $or: anyPairs };
+    if (opts?.format?.length) looseMatch.format = { $in: opts.format };
+    list = await db.collection<ResourceDoc>('resources').find(looseMatch).limit(10).toArray();
+  }
+
   return list;
 }
