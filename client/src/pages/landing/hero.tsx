@@ -17,7 +17,7 @@ export function Hero() {
       </motion.h1>
 
       <p className="mt-5 hidden text-base text-fog md:block md:text-xl">
-        Polycrawl is an MCP-native, pay-per-crawl infrastructure that lets AI agents fetch permissioned, verified data and licensed content with instant payouts to IP owners — powered by x402 and TAP.
+        Polycrawl is an MCP gateway that lets AI agents fetch data behind paywalls, logins, or anti-bot systems — legally and fairly — powered by TAP message signatures and X402 payments on Solana USDC.
       </p>
 
       <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
