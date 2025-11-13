@@ -105,22 +105,38 @@ Code pointers:
 
 ### Consumer (AI agent) flow
 
+![MCP connection](docs-media/agent-mcp-connection.png)
+
 1. Authenticate: email/password or wallet login; for MCP, OAuth 2.1 PKCE with resource indicators.
 2. Discover: call `discover_resources` with a natural‑language query; results ranked by relevance/price/latency.
+
+   ![Discover resources](docs-media/agent-discover-resources.png)
+
 3. Quote/checks: server estimates cost, enforces mode/visibility and spending caps.
 4. Settle via X402 and fetch:
    - Server may 402 with X402 `accepts`; client submits `X-PAYMENT`.
    - Server verifies payment, records `x402_tx`, then fetches and returns content.
    - If the origin requires auth, the fetch is executed via the configured Connector (API key/JWT/OAuth/internal).
 5. Receive content: base64 chunks (small/streamable) or a signed URL (Cloudinary) for larger assets.
+
+   ![Fetch result](docs-media/agent-fetch-result.png)
+
 6. Get receipt: Ed25519‑signed, includes totals, tx hashes, and optional `tap_digest`. UI links to devnet explorer.
 
 ### Provider (content owner) flow
 
 1. Create provider profile; link payout wallet (Solana public key).
 2. Publish resources: set pricing, modes (raw/summary), visibility (public/restricted), attach connector or storage.
-3. Verify ownership (optional): DNS TXT or file method for domains.
+   
+   ![Create resources](docs-media/create-resources.png)
+
+3. Verify ownership (optional; required for site resources): DNS TXT or file method for domains.
+
+   ![Verify domain ownership](docs-media/resources-domain.png)
+
 4. Earn: receive internal credits (and optional immediate on‑chain payouts). Review analytics and top sources/agents.
+
+   ![Provider earnings](docs-media/provider-earnings.png)
 5. Govern: configure spending caps, platform fee bps, and access policies.
 
 ## 8) Payments and settlement (X402 on Solana USDC)

@@ -1,8 +1,11 @@
 import { motion } from 'framer-motion'
 import { ArrowRight, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useState } from 'react'
+import { Modal } from '@/components/ui/modal'
 
 export function Hero() {
+  const [demoOpen, setDemoOpen] = useState(false)
   return (
     <div className="mx-auto max-w-3xl text-center">
       <motion.h1
@@ -27,10 +30,24 @@ export function Hero() {
         >
           Start a Crawl <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1 group-hover:scale-110" />
         </Button>
-        <Button variant="ghost" className="h-11 gap-2 px-6">
+        <Button variant="ghost" className="h-11 gap-2 px-6" onClick={() => setDemoOpen(true)}>
           Watch Demo <Play className="h-4 w-4" />
         </Button>
       </div>
+
+      <Modal open={demoOpen} title="Watch demo" onClose={() => setDemoOpen(false)}>
+        <div className="relative w-full" style={{ paddingTop: '56.25%' }}>
+          <iframe
+            className="absolute inset-0 h-full w-full rounded-xl"
+            src="https://www.youtube.com/embed/kCZEhzAP35I"
+            title="Polycrawl MCP Demo | Solana x402 Hackerthon Submission"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allowFullScreen
+          />
+        </div>
+      </Modal>
     </div>
   )
 }

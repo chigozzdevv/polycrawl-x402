@@ -1,11 +1,9 @@
 import { XIcon } from 'lucide-react'
 
 const links = [
-  { label: 'Docs', href: '#docs' },
-  { label: 'GitHub', href: '#' },
-  { label: '', href: '#', icon: XIcon },
-  { label: 'Privacy', href: '#privacy' },
-  { label: 'Terms', href: '#terms' },
+  { label: 'Docs', href: 'https://github.com/chigozzdevv/polycrawl-x402' },
+  { label: 'GitHub', href: 'https://github.com/chigozzdevv/polycrawl-x402' },
+  { label: '', href: 'https://x.com/polycrawl_', icon: XIcon, ariaLabel: 'X' },
 ]
 
 export function SiteFooter({ year }: { year: number }) {
@@ -18,12 +16,13 @@ export function SiteFooter({ year }: { year: number }) {
             const Icon = link.icon
             return (
               <a
-                key={link.label}
+                key={link.href}
                 href={link.href}
+                aria-label={link.ariaLabel || link.label}
                 className="flex items-center gap-1.5 text-fog transition-colors hover:text-parchment"
               >
                 {Icon && <Icon className="h-4 w-4" />}
-                <span>{link.label}</span>
+                {link.label && <span>{link.label}</span>}
               </a>
             )
           })}

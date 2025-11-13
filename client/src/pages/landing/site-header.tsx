@@ -9,7 +9,7 @@ const navItems = [
   { label: 'Features', href: '#features' },
   { label: 'How it works', href: '#how' },
   { label: 'FAQ', href: '#faq' },
-  { label: 'Docs', href: '#docs' },
+  { label: 'Docs', href: 'https://github.com/chigozzdevv/polycrawl-x402' },
 ]
 
 export function SiteHeader() {
