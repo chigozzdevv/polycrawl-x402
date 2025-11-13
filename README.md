@@ -1,5 +1,7 @@
 # Polycrawl - The Gateway Between AI Agents and Protected IPs.
 
+ [Updated Video Demo](https://youtu.be/kCZEhzAP35I) (pls the one in submiission form is noisy and there is no way to edit, this one is better :)
+
  Polycrawl is an MCP‑native, pay‑per‑crawl platform that lets AI agents fetch permissioned, verified data and licensed content — with instant settlement and cryptographic receipts — powered by TAP message signatures and X402 payments on Solana USDC.
 
 ## Table of contents
