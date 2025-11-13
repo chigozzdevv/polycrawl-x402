@@ -64,7 +64,7 @@ Polycrawl provides a consent‑first, protocol‑driven bridge between agents an
 - Client (React + Vite): dashboards for Consumers and Providers (wallets, analytics, receipts, resources).
 - Server (Fastify + TypeScript + MongoDB):
   - Auth: email/password, Solana wallet login, OAuth 2.1 for MCP.
-  - MCP: `/mcp` exposes discover_resources and fetch_content tools.
+  - MCP: base https://api.polycrawl.com/mcp; exposes discover_resources and fetch_content tools.
   - Payments: X402 middleware and Solana USDC settlement.
   - Storage: Cloudinary signed URLs and external connectors (API key/JWT/OAuth).
   - Receipts: Ed25519 JWT signatures; explorer links for devnet txs; optional TAP digest.
@@ -107,7 +107,7 @@ Code pointers:
 
 ![MCP connection](docs-media/agent-mcp-connection.png)
 
-1. Authenticate: email/password or wallet login; for MCP, OAuth 2.1 PKCE with resource indicators.
+1. Authenticate: email/password or wallet login; for MCP, OAuth 2.1 PKCE with resource indicators against https://api.polycrawl.com/mcp.
 2. Discover: call `discover_resources` with a natural‑language query; results ranked by relevance/price/latency.
 
    ![Discover resources](docs-media/agent-discover-resources.png)
