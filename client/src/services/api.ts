@@ -594,7 +594,6 @@ class ApiService {
     formData.append('timestamp', sig.timestamp.toString());
     formData.append('signature', sig.signature);
     formData.append('api_key', sig.api_key);
-    formData.append('resource_type', 'raw');
     formData.append('type', 'upload');
 
     const response = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloud_name}/raw/upload`, {
