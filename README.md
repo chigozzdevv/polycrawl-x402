@@ -6,28 +6,28 @@
 
 ## Table of contents
 
-1) The problem we solve
-2) The solution: Polycrawl
-3) How it works (high‑level)
-4) Architecture overview
-5) Protocols and standards
-6) Core domain model
-7) User flows
-   - Consumer (AI agent) flow
-   - Provider (content owner) flow
-8) Payments and settlement (X402 on Solana USDC)
-9) Receipts and verification
-10) Setup and installation
-    - Quick start (run locally)
-    - Prerequisites
-    - Server environment (.env)
-    - Client environment (.env)
-    - Local development commands
-    - Where to get credentials
-11) MCP tool reference
-12) Security and compliance notes
-13) Troubleshooting
-14) Project structure
+- [1) The problem we solve](#1-the-problem-we-solve)
+- [2) The solution: Polycrawl](#2-the-solution-polycrawl)
+- [3) How it works (high‑level)](#3-how-it-works-high-level)
+- [4) Architecture overview](#4-architecture-overview)
+- [5) Protocols and standards](#5-protocols-and-standards)
+- [6) Core domain model](#6-core-domain-model)
+- [7) User flows](#7-user-flows)
+  - [Consumer (AI agent) flow](#consumer-ai-agent-flow)
+  - [Provider (content owner) flow](#provider-content-owner-flow)
+- [8) Payments and settlement (X402 on Solana USDC)](#8-payments-and-settlement-x402-on-solana-usdc)
+- [9) Receipts and verification](#9-receipts-and-verification)
+- [10) Project structure](#10-project-structure)
+- [11) Setup and installation](#11-setup-and-installation)
+  - [Quick start (run locally)](#quick-start-run-locally)
+  - [Prerequisites](#prerequisites)
+  - [Server environment (server/.env)](#server-environment-serverenv)
+  - [Client environment (client/.env)](#client-environment-clientenv)
+  - [Local development commands](#local-development-commands)
+  - [Where to get credentials](#where-to-get-credentials)
+- [12) MCP tool reference](#12-mcp-tool-reference)
+- [13) Security and compliance notes](#13-security-and-compliance-notes)
+- [14) Troubleshooting](#14-troubleshooting)
 
 ---
 
@@ -47,16 +47,17 @@ Polycrawl provides a consent‑first, protocol‑driven bridge between agents an
 - MCP for capability discovery and safe agent integration.
 - TAP (RFC 9421) for signed HTTP requests and traceability.
 - Usage‑based pricing (flat or per‑KB) with spending caps and policies.
-- Settlement either with internal wallets or externally via X402 on Solana USDC (devnet by default).
+- Settlement via X402 on Solana USDC (devnet by default).
 - Ed25519‑signed receipts linking every access to immutable evidence, including on‑chain hashes and optional TAP digest.
 
 ## 3) How it works (high‑level)
 
 1) Agents authenticate (OAuth 2.1 PKCE) and discover resources via MCP.
-2) Policies/modes are enforced (raw/summary), costs estimated, caps checked.
-3) Settle payment: internal capture or X402 external settlement on Solana USDC devnet.
-4) Deliver content (inline chunks or signed URL) and issue a signed receipt.
-5) Providers receive earnings; optional immediate payout recorded on‑chain.
+2) If the target resource requires authentication, a Connector (API key/JWT/OAuth or internal) injects the correct authorization to fetch from the origin; connector secrets are encrypted at rest.
+3) Policies/modes are enforced (raw/summary), costs estimated, caps checked.
+4) Settle payment via X402 on Solana USDC (devnet by default); client responds to a 402 challenge with X-PAYMENT, server verifies and records the tx.
+5) Deliver content (inline chunks or signed URL) and issue a signed receipt.
+6) Providers receive earnings; optional immediate payout recorded on‑chain.
 
 ## 4) Architecture overview
 
@@ -64,7 +65,7 @@ Polycrawl provides a consent‑first, protocol‑driven bridge between agents an
 - Server (Fastify + TypeScript + MongoDB):
   - Auth: email/password, Solana wallet login, OAuth 2.1 for MCP.
   - MCP: `/mcp` exposes discover_resources and fetch_content tools.
-  - Payments: internal wallets, X402 middleware, Solana USDC transfers.
+  - Payments: X402 middleware and Solana USDC settlement.
   - Storage: Cloudinary signed URLs and external connectors (API key/JWT/OAuth).
   - Receipts: Ed25519 JWT signatures; explorer links for devnet txs; optional TAP digest.
 
@@ -87,7 +88,7 @@ Code pointers:
 
 - MCP (Model Context Protocol): standard tool interface for agents.
 - OAuth 2.1 + PKCE: agent authorization; `/.well-known/*` metadata provided.
-- TAP (RFC 9421): signed HTTP requests. We persist a `tap_digest` (hash of signature base) on receipts for non‑repudiation without storing raw signatures.
+- TAP (RFC 9421): enforced signed HTTP requests. For agents without TAP JWK signing yet, the server signs a loopback request to `/tap/mock` (mock) to demonstrate readiness; we still compute a `tap_digest` (hash of signature base) for non‑repudiation without storing raw signatures.
 - X402 payments: exact‑amount payment challenge/response. We settle through X402 on Solana USDC and record tx hashes.
 - Ed25519 receipts: signed with `jose` (EdDSA), verifiable by clients.
 
@@ -107,9 +108,10 @@ Code pointers:
 1. Authenticate: email/password or wallet login; for MCP, OAuth 2.1 PKCE with resource indicators.
 2. Discover: call `discover_resources` with a natural‑language query; results ranked by relevance/price/latency.
 3. Quote/checks: server estimates cost, enforces mode/visibility and spending caps.
-4. Settle and fetch:
-   - Internal: place hold, fetch, meter bytes, capture hold, split fee to platform; provider share recorded and optionally paid on‑chain.
-   - External: server may 402 with X402 `accepts`; client submits `X-PAYMENT`; settlement verified; `x402_tx` recorded.
+4. Settle via X402 and fetch:
+   - Server may 402 with X402 `accepts`; client submits `X-PAYMENT`.
+   - Server verifies payment, records `x402_tx`, then fetches and returns content.
+   - If the origin requires auth, the fetch is executed via the configured Connector (API key/JWT/OAuth/internal).
 5. Receive content: base64 chunks (small/streamable) or a signed URL (Cloudinary) for larger assets.
 6. Get receipt: Ed25519‑signed, includes totals, tx hashes, and optional `tap_digest`. UI links to devnet explorer.
 
@@ -123,20 +125,15 @@ Code pointers:
 
 ## 8) Payments and settlement (X402 on Solana USDC)
 
-Two settlement paths exist; both are supported and recorded on receipts:
+Primary settlement is via X402 on Solana USDC and is recorded on receipts:
 
-- Internal wallets
-  - Hold funds at request start (if not same‑owner access).
-  - After fetch, calculate final metered cost and capture the hold.
-  - Apply platform fee (bps); credit provider’s internal payout wallet.
-  - Optionally perform immediate on‑chain payout from the platform wallet → `provider_onchain_tx`.
-
-- External via X402
+- X402 flow
   - Middleware computes requirements for Solana devnet USDC: `network=solana-devnet`, `asset=<USDC mint>`, `payTo=<platform address>`, facilitator `feePayer`.
   - If `X-PAYMENT` is absent, respond 402 with `accepts`.
   - Verify `X-PAYMENT` using the facilitator; on success, attach `X-PAYMENT-RESPONSE`, mark settled, and persist `x402_tx`.
+  - Fee coverage: we use the Coinbase CDP facilitator as fee payer, so on-chain fees are covered; agents only need USDC for payments. Providers moving payouts to their linked wallets may incur Solana fees for those transfers.
 
-We explicitly settle through X402 on SOL USDC (Solana USDC) for external payments in devnet by default.
+Note: internal wallets exist only for local development/testing and are not used for production settlement.
 
 ## 9) Receipts and verification
 
@@ -145,14 +142,68 @@ We explicitly settle through X402 on SOL USDC (Solana USDC) for external payment
 - TAP digest: SHA‑256 of `@authority`, `@path`, and `@signature-params` (from `signature-input`) — links the TAP‑signed call to the receipt.
 - UI: transaction hashes link to Solana explorer with `?cluster=devnet`; digests are truncated visually.
 
-## 10) Setup and installation
+## 10) Project structure
+
+- Root
+  - client/ — React app (Vite)
+    - src/pages/dashboard/* — consumer/provider dashboards (wallets, receipts, resources)
+    - src/services/api.ts — typed API client
+  - server/ — Fastify API + MCP runtime
+    - src/server.ts, src/app.ts — bootstrap
+    - src/config/ — env.ts, db.ts
+    - src/middleware/ — oauth.ts, x402.ts, tap.ts
+    - src/features/
+      - auth/ — routes, service, model for auth and OAuth 2.1
+      - mcp/ — Model Context Protocol runtime
+      - payments/ — X402 payments and helpers
+      - tap/ — TAP verification and local mock helpers
+      - wallets/ — internal wallets, keys, services
+      - receipts/ — signed receipt persistence
+      - resources/, providers/, connectors/, caps/, analytics/, agents/
+    - src/services/ — solana/solana.service.ts, crypto/keystore.ts
+    - src/scripts/ — fund-agent.ts, airdrop.ts, sol-balance.ts
+  - README.md — this guide
+
+### TAP subsystem (server/src/features/tap and middleware)
+
+- middleware/tap.ts — re‑exports `requireTap` middleware
+- features/tap/tap.verifier.ts — verifies TAP signatures; loads JWKS or derives local public key; enforces nonce/timestamp windows
+- features/tap/tap.middleware.ts — Fastify preHandler enforcing TAP on routes
+- features/tap/tap.mock.routes.ts — TAP‑protected endpoints used with the mock signer to validate the stack
+- features/tap/tap-forwarder.ts — `verifyTapMock`: signs a loopback request to `/tap/mock` using local key for demo
+- features/tap/nonce.model.ts — persistent nonce index to prevent replay
+- features/tap/tap.digest.ts — computes `tap_digest` for receipts
+  
+Also:
+
+- tap-proxy/index.ts — proxy entry
+- tap-proxy/proxy-server.ts — local TAP signing proxy used for demos (`npm run tap:proxy`)
+- tap-proxy/tap-signer.ts — TAP HTTP message signer (Ed25519)
+- tap-proxy/keygen.ts — TAP key id derivation and key utilities
+
+### MCP subsystem (server/src/features/mcp)
+
+- mcp.routes.ts — registers MCP transport, hooks TAP/X402, and exposes tools endpoints
+- mcp.controller.ts — orchestrates discover and fetch
+- mcp.service.ts — business logic for discovery/fetch; integrates resources/connectors
+- mcp.schema.ts — zod schemas for inputs/outputs
+- mcp.sdk.ts — in‑process MCP runtime/transport setup
+- mcp.model.ts — data types for MCP session/context
+
+### X402 payments subsystem (server/src/features/payments and middleware)
+
+- middleware/x402.ts — `requireX402ForMcpFetch`: advertises requirements (402), verifies `X-PAYMENT`
+- features/payments/x402.service.ts — talks to facilitator to verify/settle; requirement helpers and validators
+- features/payments/x402-custodial.service.ts — builds custodial payment payloads (Solana USDC devnet)
+
+## 11) Setup and installation
 
 ### Quick start (run locally)
 
 1) Start MongoDB locally or use Atlas (see links below).
 2) Server
 
-```
+```bash
 cd server
 npm install
 cp .env.example .env  # fill the required values from the table below
@@ -162,7 +213,7 @@ npm run dev           # starts Fastify on http://localhost:3000
 
 3) Client
 
-```
+```bash
 cd client
 npm install
 cp .env.example .env  # set VITE_API_BASE_URL=http://localhost:3000
@@ -171,7 +222,7 @@ npm run dev           # starts Vite on http://localhost:5173
 
 Production build:
 
-```
+```bash
 cd server && npm run build && npm start
 ```
 
@@ -192,11 +243,11 @@ Minimum:
 - `KEY_ENCRYPTION_KEY` (used to encrypt wallet keys and connector secrets)
 - `CLIENT_APP_URL` (e.g., http://localhost:5173)
 
-TAP (mock by default):
+TAP:
 
 - `TAP_JWKS_URL` — optional; verification will first try JWKS, then fall back to local key
 - `TAP_PRIVATE_KEY_PATH` (+ optional `TAP_KEY_ID`) — enables deriving a public key locally for verification
-- Note: the MCP route runs a TAP mock so agents (e.g., Claude) without TAP signing can still be demonstrated; real TAP is ready when clients support signatures.
+- Note: TAP is fully wired. If an agent can’t sign yet, the server signs a loopback request to `/tap/mock` using the local key (verifyTapMock) to demonstrate; disable the mock when real signatures are available.
 
 X402 / Solana (external settlement via Coinbase CDP facilitator):
 
@@ -238,7 +289,7 @@ For Solana wallets and keys, you can use `solana-keygen` or a custodial approach
 
 ---
 
-## 11) MCP tool reference
+## 12) MCP tool reference
 
 ### discover_resources
 
@@ -255,38 +306,18 @@ For Solana wallets and keys, you can use `solana-keygen` or a custodial approach
   - On success: `{ content, receipt }`, where `content` is `{ chunks: string[] }` or `{ url }`.
   - The `receipt` may include `x402_tx`, `provider_onchain_tx`, and `tap_digest`.
 
-## 12) Security and compliance notes
+## 13) Security and compliance notes
 
 - TAP verification enforces nonce/timestamp windows; nonces are stored with TTL to prevent replay.
 - OAuth 2.1 + PKCE and resource indicators scope access to `/mcp`.
 - Resource policies (modes, visibility) and per‑user caps protect Providers and Users.
 - Keys and connector configs are encrypted at rest (`KEY_ENCRYPTION_KEY`).
 
-## 13) Troubleshooting
+## 14) Troubleshooting
 
 - Missing hashes in receipts: same‑owner access may waive cost and skip settlement.
 - TAP verification errors: provide `TAP_JWKS_URL` or set `TAP_PRIVATE_KEY_PATH` so a public key can be derived.
 - On‑chain payouts failing: ensure platform wallet has SOL for fees and USDC on devnet; verify `X402_PLATFORM_PRIVATE_KEY`.
 - Large assets return signed URLs; ensure Cloudinary credentials are set.
 
-## 14) Project structure
-
-- Root
-  - client/ — React app (Vite)
-    - src/pages/dashboard/* — consumer/provider dashboards (wallets, receipts, resources)
-    - src/services/api.ts — typed API client
-  - server/ — Fastify API + MCP runtime
-    - src/server.ts, src/app.ts — bootstrap
-    - src/config/ — env.ts, db.ts
-    - src/middleware/ — oauth.ts, x402.ts, tap.ts
-    - src/features/
-      - auth/ — routes, service, model for auth and OAuth 2.1
-      - mcp/ — mcp.routes.ts, schema, controller, service, SDK
-      - payments/ — x402.service.ts, x402-custodial.service.ts
-      - tap/ — tap.verifier.ts, tap.middleware.ts, tap.mock.routes.ts, tap.digest.ts
-      - wallets/ — internal wallets, keys, services
-      - receipts/ — signed receipt persistence
-      - resources/, providers/, connectors/, caps/, analytics/, agents/
-    - src/services/ — solana/solana.service.ts, crypto/keystore.ts
-    - src/scripts/ — fund-agent.ts, airdrop.ts, sol-balance.ts
-  - README.md — this guide
+ 
